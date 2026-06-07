@@ -1,0 +1,3 @@
+{
+  "extends": "@steamcommunity.bet/config/tsconfig.base.json"
+}

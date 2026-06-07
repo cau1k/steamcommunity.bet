@@ -1,0 +1,41 @@
+{
+  "name": "web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync || echo ''",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "dev:bare": "vite dev"
+  },
+  "dependencies": {
+    "@orpc/client": "catalog:",
+    "@orpc/server": "catalog:",
+    "@orpc/tanstack-query": "^1.13.14",
+    "@steamcommunity.bet/api": "workspace:*",
+    "@steamcommunity.bet/env": "workspace:*",
+    "@tanstack/svelte-form": "^1.28.0",
+    "@tanstack/svelte-query": "^5.85.3",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@steamcommunity.bet/config": "workspace:*",
+    "@sveltejs/adapter-auto": "^7.0.1",
+    "@sveltejs/adapter-cloudflare": "^7.2.8",
+    "@sveltejs/kit": "^2.58.0",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@tailwindcss/vite": "^4.2.4",
+    "@tanstack/svelte-query-devtools": "^5.85.3",
+    "alchemy": "catalog:",
+    "svelte": "^5.55.5",
+    "svelte-check": "^4.4.6",
+    "tailwindcss": "^4.2.4",
+    "typescript": "catalog:",
+    "vite": "^8.0.10"
+  }
+}

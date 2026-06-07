@@ -1,0 +1,24 @@
+{
+  "name": "@steamcommunity.bet/auth",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@steamcommunity.bet/db": "workspace:*",
+    "@steamcommunity.bet/env": "workspace:*",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@steamcommunity.bet/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}
