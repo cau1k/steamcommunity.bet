@@ -396,18 +396,91 @@ Current stack targets Cloudflare through Alchemy:
 - Better Auth
 - oRPC
 
-Required env once the domain is on Cloudflare:
+Env lives in two places:
 
+- `packages/env`
+  - server reads Worker bindings through `cloudflare:workers`
+  - web validates public `PUBLIC_` values with `@t3-oss/env-core`
+- `packages/infra/alchemy.run.ts`
+  - declares D1/resources
+  - binds plain config with `alchemy.env.*`
+  - binds secrets with `alchemy.secret.env.*`
+
+Worker bindings:
+
+- `DB`
+  - Cloudflare D1 binding
+  - created by Alchemy
+- `CORS_ORIGIN`
+  - plain config
+  - production: `https://steamcommunity.bet`
+- `BETTER_AUTH_URL`
+  - plain config
+  - production: `https://steamcommunity.bet`
 - `BETTER_AUTH_SECRET`
-- `BETTER_AUTH_URL=https://steamcommunity.bet`
-- `CORS_ORIGIN=https://steamcommunity.bet`
+  - secret
+  - session/signing secret
 - `STEAM_API_KEY`
-- `LEETIFY_API_KEY`, optional but preferred for rate limits
+  - secret
+  - Steam Web API key for profile summaries, ban state, vanity resolution
+- `LEETIFY_API_KEY`
+  - secret
+  - optional but preferred for better rate limits
+
+Provider config:
+
+- `LEETIFY_BASE_URL`
+  - plain config
+  - default: `https://api-public.cs-prod.leetify.com`
+- `LEETIFY_TIMEOUT_MS`
+  - plain config
+  - default: `10000`
+- `CSSTATS_BASE_URL`
+  - plain config
+  - default: `https://csgostats.gg`
+- `CSSTATS_TIMEOUT_MS`
+  - plain config
+  - default: `10000`
+- `CSSTATS_USER_AGENT`
+  - plain config
+  - identify the service for scraped requests
+- `PROVIDER_CACHE_STALE_HOURS`
+  - plain config
+  - default provider freshness window
+- `PROVIDER_CACHE_ERROR_TTL_MINUTES`
+  - plain config
+  - short TTL for failed fetches
+- `REPORT_STALE_HOURS`
+  - plain config
+  - generated report refresh window
+
+Web bindings:
+
+- `PUBLIC_SERVER_URL`
+  - public
+  - bound from the server Worker URL by Alchemy
+
+Deploy-runner env:
+
+- `CLOUDFLARE_API_TOKEN`
+  - secret in the deploy environment, not a Worker binding
+- `CLOUDFLARE_ACCOUNT_ID`
+  - deploy environment config, not a Worker binding
+- `DATABASE_URL`
+  - local/tooling only if Drizzle needs it
+  - runtime database access uses the D1 `DB` binding
 
 Likely routing:
 
 - `https://steamcommunity.bet` -> web
 - `https://api.steamcommunity.bet` -> server, if split routing becomes useful
+
+Expected `packages/infra/alchemy.run.ts` additions:
+
+- bind provider secrets to the server Worker
+- bind provider base URLs/timeouts/cache windows to the server Worker
+- keep `PUBLIC_SERVER_URL` web-only
+- do not expose Steam or Leetify keys to `apps/web`
 
 ## Guardrails
 
