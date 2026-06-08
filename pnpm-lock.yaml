@@ -236,6 +236,9 @@ importers:
       '@steamcommunity.bet/env':
         specifier: workspace:*
         version: link:../env
+      '@steamcommunity.bet/providers':
+        specifier: workspace:*
+        version: link:../providers
       dotenv:
         specifier: 'catalog:'
         version: 17.4.2
@@ -354,6 +357,19 @@ importers:
       alchemy:
         specifier: 'catalog:'
         version: 0.91.2(@libsql/client@0.15.15)(kysely@0.28.17)(vite@8.0.16(@types/node@25.9.2)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))(workerd@1.20260603.1)(wrangler@4.98.0(@cloudflare/workers-types@4.20260607.1))
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+
+  packages/providers:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+    devDependencies:
+      '@steamcommunity.bet/config':
+        specifier: workspace:*
+        version: link:../config
       typescript:
         specifier: 'catalog:'
         version: 6.0.3

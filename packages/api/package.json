@@ -18,6 +18,7 @@
     "@steamcommunity.bet/auth": "workspace:*",
     "@steamcommunity.bet/db": "workspace:*",
     "@steamcommunity.bet/env": "workspace:*",
+    "@steamcommunity.bet/providers": "workspace:*",
     "dotenv": "catalog:",
     "drizzle-orm": "catalog:",
     "zod": "catalog:"

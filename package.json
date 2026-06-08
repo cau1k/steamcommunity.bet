@@ -15,7 +15,8 @@
     "db:generate": "turbo -F @steamcommunity.bet/db db:generate",
     "deploy": "turbo -F @steamcommunity.bet/infra deploy",
     "destroy": "turbo -F @steamcommunity.bet/infra destroy",
-    "check": "oxlint && oxfmt --write"
+    "check": "oxlint && oxfmt --write",
+    "test": "node --experimental-strip-types --test 'packages/**/*.test.ts'"
   },
   "dependencies": {
     "@steamcommunity.bet/env": "workspace:*",

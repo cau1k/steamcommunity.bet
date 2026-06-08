@@ -11,6 +11,11 @@ export async function createContext({ context }: CreateContextOptions) {
   });
   return {
     auth: null,
+    waitUntil: (
+      context as HonoContext & { executionCtx?: ExecutionContext }
+    ).executionCtx?.waitUntil.bind(
+      (context as HonoContext & { executionCtx?: ExecutionContext }).executionCtx,
+    ),
     session,
   };
 }

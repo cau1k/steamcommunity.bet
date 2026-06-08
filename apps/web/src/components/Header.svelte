@@ -9,7 +9,7 @@
 		<nav class="flex gap-4 text-lg">
 			<a href="/" class="hover:text-neutral-400 transition-colors">Home</a>
 			<a href="/dashboard" class="hover:text-neutral-400 transition-colors">Dashboard</a>
-			<a href="/todos" class="hover:text-neutral-400 transition-colors">Todos</a>
+			<a href="/profiles/76561199857251932" class="hover:text-neutral-400 transition-colors">Calibration</a>
 		</nav>
 		<div class="flex items-center gap-2">
             <UserMenu />
