@@ -305,19 +305,6 @@ p {
   text-shadow: 1px 1px var(--cs-light);
 }
 
-.cs-vote-btn {
-  width: 36px;
-  height: 32px;
-  padding: 0;
-  justify-content: center;
-  font-size: 22px;
-  line-height: 1;
-}
-
-.cs-vote-btn.--primary {
-  color: #fff;
-}
-
 .cs-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -425,6 +412,13 @@ p {
 .cs-source-stats b {
   color: var(--cs-text-3);
   font-weight: inherit;
+  text-shadow: 1px 1px var(--cs-black);
+}
+
+.cs-source-missing {
+  color: var(--cs-danger);
+  font-size: 14px;
+  line-height: 1.2;
   text-shadow: 1px 1px var(--cs-black);
 }
 

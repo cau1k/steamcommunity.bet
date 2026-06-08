@@ -237,7 +237,10 @@
 	const lastRefreshedLabel = $derived(formatLastRefreshed(report?.refreshedAt));
 	const reportModalTitle = $derived(reportVote ? reportVoteTitle(reportVote, report?.verdict) : '');
 	const reportModalReason = $derived(reportVote ? reportVoteReason(reportVote, report?.verdict) : '');
-	const reportVotePrimary = $derived(report?.verdict === 'likely_cheating' ? 'up' : 'down');
+	const reportAction = $derived(report?.verdict === 'likely_cheating' ? 'down' : 'up');
+	const reportActionLabel = $derived(
+		report?.verdict === 'likely_cheating' ? 'Dispute cheating' : 'Accuse of cheating'
+	);
 	const isSubmittingReport = $derived($playerReportMutation.isPending);
 
 	function refreshReport() {
@@ -406,7 +409,7 @@
 
 	function reportVoteTitle(vote: ReportVote, verdict: ProviderReport['verdict'] | undefined) {
 		if (vote === 'up') {
-			return verdict === 'likely_cheating' ? 'Confirm likely cheating' : 'Dispute not cheating';
+			return verdict === 'likely_cheating' ? 'Confirm likely cheating' : 'Accuse of cheating';
 		}
 		return verdict === 'likely_not_cheating' ? 'Confirm likely not cheating' : 'Dispute cheating';
 	}
@@ -415,7 +418,7 @@
 		if (vote === 'up') {
 			return verdict === 'likely_cheating'
 				? 'Reporter agrees the player is likely cheating'
-				: 'Reporter disputes the likely not cheating verdict';
+				: 'Reporter accuses the player of cheating';
 		}
 		return verdict === 'likely_not_cheating'
 			? 'Reporter agrees the player is likely not cheating'
@@ -619,6 +622,9 @@
 													{/each}
 												</div>
 											{/if}
+											{#if source.label === 'FACEIT' && source.missing}
+												<p class="cs-source-missing">FACEIT account not found</p>
+											{/if}
 										</div>
 									{/each}
 								</div>
@@ -667,22 +673,12 @@
 						{#if $sessionQuery.data?.user}
 							<div class="mt-4 flex flex-wrap gap-2">
 								<button
-									class="cs-btn cs-vote-btn {reportVotePrimary === 'up' ? '--primary' : ''}"
+									class="cs-btn"
 									type="button"
 									disabled={isSubmittingReport}
-									aria-label="Thumbs up report"
-									onclick={() => openReportModal('up')}
+									onclick={() => openReportModal(reportAction)}
 								>
-									<span aria-hidden="true">+</span>
-								</button>
-								<button
-									class="cs-btn cs-vote-btn {reportVotePrimary === 'down' ? '--primary' : ''}"
-									type="button"
-									disabled={isSubmittingReport}
-									aria-label="Thumbs down report"
-									onclick={() => openReportModal('down')}
-								>
-									<span aria-hidden="true">-</span>
+									{reportActionLabel}
 								</button>
 							</div>
 						{:else}
