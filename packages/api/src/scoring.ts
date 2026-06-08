@@ -4,7 +4,6 @@ import type {
   FaceitProfile,
   LeetifyProfile,
   SteamBanState,
-  SteamPlayerSummary,
 } from "@steamcommunity.bet/providers";
 import { buildLeetifyProfileStats } from "@steamcommunity.bet/providers/leetify-client";
 
@@ -31,81 +30,6 @@ export function scoreReport(
         ? "Available provider signals indicate this profile is likely cheating."
         : "Available provider signals indicate this profile is likely not cheating.",
   };
-}
-
-export function calibrationPayload(provider: Provider) {
-  if (provider === "steam") {
-    return {
-      steamId64: TARGET_STEAM_ID,
-      personaName: "Calibration target",
-      profileUrl: `https://steamcommunity.com/profiles/${TARGET_STEAM_ID}`,
-      avatarUrl: null,
-      visibilityState: null,
-    } satisfies SteamPlayerSummary;
-  }
-  if (provider === "steam_bans") {
-    return {
-      steamId64: TARGET_STEAM_ID,
-      communityBanned: false,
-      vacBanned: false,
-      vacBanCount: 0,
-      daysSinceLastBan: 0,
-      gameBanCount: 0,
-    } satisfies SteamBanState;
-  }
-  if (provider === "leetify") {
-    return {
-      steam64Id: TARGET_STEAM_ID,
-      isLeetifyUser: false,
-      rating: 6.2,
-    } satisfies LeetifyProfile;
-  }
-  if (provider === "faceit") {
-    return {
-      steamId64: TARGET_STEAM_ID,
-      found: false,
-      playerId: null,
-      nickname: null,
-      avatarUrl: null,
-      country: null,
-      faceitUrl: null,
-      skillLevel: null,
-      elo: null,
-      gamePlayerId: null,
-      gamePlayerName: null,
-    } satisfies FaceitProfile;
-  }
-  return {
-    steamId64: TARGET_STEAM_ID,
-    profileUrl: `https://csgostats.gg/player/${TARGET_STEAM_ID}`,
-    statsUrl: `https://csgostats.gg/player/${TARGET_STEAM_ID}/stats`,
-    name: "Calibration target",
-    title: "Calibration target",
-    premierRating: 24_856,
-    bestPremierRating: 24_856,
-    hasFaceit: false,
-    bestRating: 6.2,
-    kdRatio: 1.42,
-    hltvRating: 1.34,
-    matches: 64,
-    winRate: 71,
-    hsPercentage: 64,
-    adr: 96,
-    clutchPercentage: 22,
-    recentResults: ["W", "W", "L", "W", "W"],
-    mostPlayedMap: "de_dust2",
-    premierRatings: [
-      { season: 4, latestRating: 24_856, bestRating: 24_856, wins: 41 },
-      { season: 3, latestRating: 12_634, bestRating: 12_634, wins: 29 },
-    ],
-    competitiveRanks: [
-      { map: "Dust II", latestRank: 15, bestRank: 15, wins: 27 },
-      { map: "Mirage", latestRank: 12, bestRank: 13, wins: 19 },
-    ],
-    wingman: { latestRank: 11, bestRank: 13, wins: 16 },
-    rawHtml: "",
-    rawStatsHtml: "",
-  } satisfies CSStatsPlayerProfile;
 }
 
 type Signal = {

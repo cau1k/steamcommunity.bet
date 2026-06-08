@@ -25,7 +25,7 @@ import z from "zod";
 
 import { ORPCError } from "../index";
 import { protectedProcedure, publicProcedure } from "../index";
-import { calibrationPayload, scoreReport, TARGET_STEAM_ID, type Provider } from "../scoring";
+import { scoreReport, TARGET_STEAM_ID, type Provider } from "../scoring";
 
 const resolveInput = z.object({ path: z.string().min(1) });
 const steamIdInput = z.object({ steamId64: z.string().regex(/^\d{17}$/) });
@@ -358,9 +358,6 @@ async function queueRefreshIfStale(
 }
 
 async function fetchProviderPayload(steamId64: string, provider: Provider) {
-  if (steamId64 === TARGET_STEAM_ID) {
-    return calibrationPayload(provider);
-  }
   if (provider === "steam") {
     return createSteamClient({ apiKey: env.STEAM_API_KEY }).getPlayerSummary(steamId64);
   }
@@ -439,7 +436,7 @@ async function upsertProviderCache(row: typeof providerCache.$inferInsert) {
 
 async function getLatestReport(steamId64: string) {
   const db = createDb();
-  const [report, caches, reports] = await Promise.all([
+  const [report, initialCaches, reports] = await Promise.all([
     db
       .select()
       .from(generatedReport)
@@ -449,8 +446,13 @@ async function getLatestReport(steamId64: string) {
     db.select().from(providerCache).where(eq(providerCache.steamId, steamId64)),
     listPlayerReports(steamId64),
   ]);
+  let caches = initialCaches;
   if (!report) {
     return undefined;
+  }
+  if (hasFakeCalibrationSteamCache(steamId64, caches)) {
+    await refreshProvider(steamId64, "steam", true);
+    caches = await db.select().from(providerCache).where(eq(providerCache.steamId, steamId64));
   }
   const verdict =
     (report.verdict as string) === "not_enough_evidence" ? "likely_not_cheating" : report.verdict;
@@ -464,6 +466,19 @@ async function getLatestReport(steamId64: string) {
     buildProviderDetails(caches),
     reports,
   );
+}
+
+function hasFakeCalibrationSteamCache(
+  steamId64: string,
+  caches: Array<typeof providerCache.$inferSelect>,
+) {
+  if (steamId64 !== TARGET_STEAM_ID) {
+    return false;
+  }
+  const steam = caches.find(
+    (cache) => cache.provider === "steam" && cache.fetchStatus === "success",
+  )?.rawPayload as SteamPlayerSummary | null | undefined;
+  return steam?.personaName === "Calibration target";
 }
 
 async function listPlayerReports(steamId64: string) {
