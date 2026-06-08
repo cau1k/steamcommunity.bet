@@ -1,19 +1,16 @@
 <script lang="ts">
-
 	import UserMenu from './UserMenu.svelte';
-
 </script>
 
-<div>
-	<div class="flex flex-row items-center justify-between px-4 py-2 md:px-6">
-		<nav class="flex gap-4 text-lg">
-			<a href="/" class="hover:text-neutral-400 transition-colors">Home</a>
-			<a href="/dashboard" class="hover:text-neutral-400 transition-colors">Dashboard</a>
-			<a href="/profiles/76561199857251932" class="hover:text-neutral-400 transition-colors">Calibration</a>
+<header class="cs-nav">
+	<div class="mx-auto flex min-h-10 w-full max-w-6xl items-center justify-between gap-4 px-4 md:px-6">
+		<nav class="flex flex-wrap items-center gap-4 text-sm">
+			<a href="/" class="cs-nav-link">Find Player</a>
+			<a href="/dashboard" class="cs-nav-link">Dashboard</a>
+			<a href="/profiles/76561199857251932" class="cs-nav-link">Calibration</a>
 		</nav>
 		<div class="flex items-center gap-2">
-            <UserMenu />
+			<UserMenu />
 		</div>
 	</div>
-	<hr class="border-neutral-800" />
-</div>
+</header>

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createLeetifyClient } from "./leetify-client.ts";
+import { buildLeetifyProfileStats, createLeetifyClient } from "./leetify-client.ts";
 
 test("treats Leetify profile 404 as no registered account", async () => {
   const steamId64 = "76561198000000000";
@@ -15,4 +15,83 @@ test("treats Leetify profile 404 as no registered account", async () => {
   assert.equal(profile.leetifyUserId, null);
   assert.equal(profile.isLeetifyUser, false);
   assert.equal(profile.rating, null);
+});
+
+test("parses full Leetify public profile stats", async () => {
+  const steamId64 = "76561198055756106";
+  const client = createLeetifyClient({
+    baseUrl: "https://leetify.test",
+    fetch: async (input) => {
+      assert.equal(String(input), `https://leetify.test/api/profile/id/${steamId64}`);
+      return Response.json({
+        meta: {
+          name: "Piewhat",
+          steam64Id: steamId64,
+          faceitNickname: "piewhat",
+        },
+        recentGameRatings: {
+          gamesPlayed: 3,
+          leetify: 0.0817,
+          aim: 69.4,
+          utility: 78,
+          positioning: 72.5,
+          opening: 0.0415,
+          tLeetify: 0.0651,
+          ctLeetify: 0.1001,
+          clutch: 0.1707,
+        },
+        games: [
+          {
+            gameFinishedAt: "2026-06-08T03:14:34.000Z",
+            isCs2: true,
+            dataSource: "matchmaking_competitive",
+            mapName: "de_cache",
+            matchResult: "win",
+            rankType: 12,
+            skillLevel: 13,
+            kills: 30,
+            deaths: 14,
+            accuracyHead: 0.1132,
+          },
+          {
+            gameFinishedAt: "2026-06-07T03:14:34.000Z",
+            isCs2: true,
+            dataSource: "matchmaking_competitive",
+            mapName: "de_dust2",
+            matchResult: "loss",
+            rankType: 12,
+            skillLevel: 11,
+            kills: 22,
+            deaths: 15,
+            accuracyHead: 0.2192,
+          },
+          {
+            gameFinishedAt: "2026-01-17T21:24:41.000Z",
+            isCs2: true,
+            dataSource: "matchmaking",
+            mapName: "de_overpass",
+            matchResult: "win",
+            rankType: 11,
+            skillLevel: 23695,
+            kills: 20,
+            deaths: 10,
+            accuracyHead: 0.2,
+          },
+        ],
+      });
+    },
+  });
+
+  const profile = await client.getProfile(steamId64);
+  const stats = buildLeetifyProfileStats(steamId64, profile);
+
+  assert.equal(profile.rating, 8.17);
+  assert.equal(stats?.name, "Piewhat");
+  assert.equal(stats?.hasFaceit, true);
+  assert.equal(stats?.premierRating, 23695);
+  assert.equal(stats?.bestPremierRating, 23695);
+  assert.equal(stats?.competitiveRanks[0]?.map, "Cache");
+  assert.equal(stats?.competitiveRanks[0]?.latestRank, 13);
+  assert.equal(stats?.bestRating, 8.17);
+  assert.equal(stats?.recentResults.join(""), "WLW");
 });

@@ -5,6 +5,7 @@ import type {
   SteamBanState,
   SteamPlayerSummary,
 } from "@steamcommunity.bet/providers";
+import { buildLeetifyProfileStats } from "@steamcommunity.bet/providers/leetify-client";
 
 export const TARGET_STEAM_ID = "76561199857251932";
 
@@ -208,6 +209,7 @@ function buildSignals(
   const leetify = caches.find(
     (cache) => cache.provider === "leetify" && cache.fetchStatus === "success",
   )?.rawPayload as LeetifyProfile | null | undefined;
+  const leetifyStats = buildLeetifyProfileStats(steamId64, leetify);
   if (typeof leetify?.rating === "number" && leetify.rating >= 6) {
     signals.push({
       provider: "leetify",
@@ -217,6 +219,48 @@ function buildSignals(
       confidence: "medium",
       sourceUrl: `https://leetify.com/app/profile/${steamId64}`,
     });
+  }
+  if (
+    !csstats &&
+    leetifyStats?.premierRating &&
+    leetifyStats.premierRating >= 24_000 &&
+    leetifyStats.hasFaceit === false
+  ) {
+    signals.push({
+      provider: "leetify",
+      signal: "elite_premier_no_faceit",
+      value: `Premier rating ${leetifyStats.premierRating}; FACEIT absent`,
+      weight: 20,
+      confidence: "high",
+      sourceUrl: leetifyStats.profileUrl,
+    });
+  }
+  if (!csstats && leetifyStats?.matches && leetifyStats.matches >= 20) {
+    if (
+      typeof leetifyStats.bestRating === "number" &&
+      leetifyStats.bestRating >= 8 &&
+      typeof leetifyStats.kdRatio === "number" &&
+      leetifyStats.kdRatio >= 1.5
+    ) {
+      signals.push({
+        provider: "leetify",
+        signal: "leetify_performance_outlier",
+        value: `Leetify ${leetifyStats.bestRating}; K/D ${leetifyStats.kdRatio.toFixed(2)} over ${leetifyStats.matches} matches`,
+        weight: 10,
+        confidence: "medium",
+        sourceUrl: leetifyStats.statsUrl,
+      });
+    }
+    if (typeof leetifyStats.winRate === "number" && leetifyStats.winRate >= 70) {
+      signals.push({
+        provider: "leetify",
+        signal: "leetify_high_winrate",
+        value: `${leetifyStats.winRate}% win rate over ${leetifyStats.matches} matches`,
+        weight: 8,
+        confidence: "medium",
+        sourceUrl: leetifyStats.statsUrl,
+      });
+    }
   }
 
   if (reportCount > 0) {

@@ -9,7 +9,7 @@
 </script>
 
 <QueryClientProvider client={queryClient}>
-    <div class="grid h-svh grid-rows-[auto_1fr]">
+    <div class="cs-layout grid h-svh grid-rows-[auto_1fr]">
 		<Header />
 		<main class="overflow-y-auto">
 			{@render children()}

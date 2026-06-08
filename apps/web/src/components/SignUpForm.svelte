@@ -41,8 +41,13 @@
 	type SubmitState = Pick<typeof form.state, 'canSubmit' | 'isSubmitting'>;
 </script>
 
-<div class="mx-auto mt-10 w-full max-w-md p-6">
-	<h1 class="mb-6 text-center font-bold text-3xl">Create Account</h1>
+<div class="cs-shell max-w-md">
+	<div class="cs-window">
+		<div class="cs-window-title">
+			<p>Create Account</p>
+		</div>
+		<div class="cs-window-body">
+			<h1 class="text-3xl leading-none">Create Account</h1>
 
 	<form
 		id="form"
@@ -56,11 +61,11 @@
 		<form.Field name="name">
 			{#snippet children(field)}
 				<div class="space-y-1">
-					<label for={field.name}>Name</label>
+					<label class="cs-label" for={field.name}>Name</label>
 					<input
 						id={field.name}
 						name={field.name}
-						class="w-full border"
+						class="cs-input w-full"
 						onblur={field.handleBlur}
 						value={field.state.value}
 						oninput={(e: Event) => {
@@ -70,7 +75,7 @@
 					/>
 					{#if field.state.meta.isTouched}
 						{#each field.state.meta.errors as error}
-							<p class="text-sm text-red-500" role="alert">{error}</p>
+							<p class="text-sm text-[var(--cs-danger)]" role="alert">{error}</p>
 						{/each}
 					{/if}
 				</div>
@@ -80,12 +85,12 @@
 		<form.Field name="email">
 			{#snippet children(field)}
 				<div class="space-y-1">
-					<label for={field.name}>Email</label>
+					<label class="cs-label" for={field.name}>Email</label>
 					<input
 						id={field.name}
 						name={field.name}
 						type="email"
-						class="w-full border"
+						class="cs-input w-full"
 						onblur={field.handleBlur}
 						value={field.state.value}
 						oninput={(e: Event) => {
@@ -95,7 +100,7 @@
 					/>
 					{#if field.state.meta.isTouched}
 						{#each field.state.meta.errors as error}
-							<p class="text-sm text-red-500" role="alert">{error}</p>
+							<p class="text-sm text-[var(--cs-danger)]" role="alert">{error}</p>
 						{/each}
 					{/if}
 				</div>
@@ -105,12 +110,12 @@
 		<form.Field name="password">
 			{#snippet children(field)}
 				<div class="space-y-1">
-					<label for={field.name}>Password</label>
+					<label class="cs-label" for={field.name}>Password</label>
 					<input
 						id={field.name}
 						name={field.name}
 						type="password"
-						class="w-full border"
+						class="cs-input w-full"
 						onblur={field.handleBlur}
 						value={field.state.value}
 						oninput={(e: Event) => {
@@ -120,7 +125,7 @@
 					/>
 					{#if field.state.meta.isTouched}
 						{#each field.state.meta.errors as error}
-							<p class="text-sm text-red-500" role="alert">{error}</p>
+							<p class="text-sm text-[var(--cs-danger)]" role="alert">{error}</p>
 						{/each}
 					{/if}
 				</div>
@@ -129,16 +134,18 @@
 
 		<form.Subscribe selector={(state: typeof form.state): SubmitState => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}>
 			{#snippet children(state: SubmitState)}
-				<button type="submit" class="w-full" disabled={!state.canSubmit || state.isSubmitting}>
+				<button type="submit" class="cs-btn w-full" disabled={!state.canSubmit || state.isSubmitting}>
 					{state.isSubmitting ? 'Submitting...' : 'Sign Up'}
 				</button>
 			{/snippet}
 		</form.Subscribe>
 	</form>
 
-	<div class="mt-4 text-center">
-		<button type="button" class="text-indigo-600 hover:text-indigo-800" onclick={switchToSignIn}>
+	<div class="mt-1 text-center">
+		<button type="button" class="cs-link" onclick={switchToSignIn}>
 			Already have an account? Sign In
 		</button>
+	</div>
+		</div>
 	</div>
 </div>

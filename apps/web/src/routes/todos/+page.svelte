@@ -64,22 +64,21 @@
 
 </script>
 
-<div class="p-4">
-	<h1 class="text-xl mb-4">Todos (oRPC)</h1>
+<div class="cs-shell">
+	<div class="cs-window">
+		<div class="cs-window-title"><p>Todos (oRPC)</p></div>
+		<div class="cs-window-body">
+			<h1 class="text-3xl leading-none">Todos</h1>
 
-	<form onsubmit={handleAddTodo} class="flex gap-2 mb-4">
+	<form onsubmit={handleAddTodo} class="mb-4 flex gap-2">
 		<input
 			type="text"
 			bind:value={newTodoText}
 			placeholder="New task..."
 			disabled={isAdding}
-			class=" p-1 flex-grow"
+			class="cs-input flex-grow"
 		/>
-		<button
-			type="submit"
-			disabled={!canAdd}
-			class="bg-blue-500 text-white px-3 py-1 rounded disabled:opacity-50"
-		>
+		<button type="submit" disabled={!canAdd} class="cs-btn">
 			{#if isAdding}Adding...{:else}Add{/if}
 		</button>
 	</form>
@@ -94,10 +93,7 @@
 				{@const isToggling = $toggleMutation.isPending && $toggleMutation.variables?.id === todo.id}
 				{@const isDeleting = $deleteMutation.isPending && $deleteMutation.variables?.id === todo.id}
 				{@const isDisabled = isToggling || isDeleting}
-				<li
-					class="flex items-center justify-between p-2 "
-					class:opacity-50={isDisabled}
-				>
+				<li class="cs-panel flex items-center justify-between" class:opacity-50={isDisabled}>
 					<div class="flex items-center gap-2">
 						<input
 							type="checkbox"
@@ -118,7 +114,7 @@
 						onclick={() => handleDeleteTodo(todo.id)}
 						disabled={isDisabled}
 						aria-label="Delete todo"
-						class="text-red-500 px-1 disabled:opacity-50"
+						class="cs-btn"
 					>
 						{#if isDeleting}Deleting...{:else}X{/if}
 					</button>
@@ -128,23 +124,25 @@
 	{/if}
 
 	{#if $todosQuery.isError}
-		<p class="mt-4 text-red-500">
+		<p class="mt-4 text-[var(--cs-danger)]">
 			Error loading: {$todosQuery.error?.message ?? 'Unknown error'}
 		</p>
 	{/if}
 	{#if $addMutation.isError}
-		<p class="mt-4 text-red-500">
+		<p class="mt-4 text-[var(--cs-danger)]">
 			Error adding: {$addMutation.error?.message ?? 'Unknown error'}
 		</p>
 	{/if}
 	{#if $toggleMutation.isError}
-		<p class="mt-4 text-red-500">
+		<p class="mt-4 text-[var(--cs-danger)]">
 			Error updating: {$toggleMutation.error?.message ?? 'Unknown error'}
 		</p>
 	{/if}
 	{#if $deleteMutation.isError}
-		<p class="mt-4 text-red-500">
+		<p class="mt-4 text-[var(--cs-danger)]">
 			Error deleting: {$deleteMutation.error?.message ?? 'Unknown error'}
 		</p>
 	{/if}
+		</div>
+	</div>
 </div>

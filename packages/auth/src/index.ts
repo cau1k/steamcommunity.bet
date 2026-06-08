@@ -3,6 +3,7 @@ import * as schema from "@steamcommunity.bet/db/schema/auth";
 import { env } from "@steamcommunity.bet/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { steamOpenId } from "./steam-plugin";
 
 export function createAuth() {
   const db = createDb();
@@ -18,8 +19,9 @@ export function createAuth() {
     }),
     trustedOrigins,
     emailAndPassword: {
-      enabled: true,
+      enabled: false,
     },
+    plugins: [steamOpenId()],
     // uncomment cookieCache setting when ready to deploy to Cloudflare using *.workers.dev domains
     // session: {
     //   cookieCache: {

@@ -9,10 +9,12 @@ import {
 } from "@steamcommunity.bet/db/schema/report";
 import { env } from "@steamcommunity.bet/env/server";
 import {
+  buildLeetifyProfileStats,
   createCSStatsClient,
   createLeetifyClient,
   createSteamClient,
   type CSStatsPlayerProfile,
+  type LeetifyProfile,
   type SteamPlayerSummary,
 } from "@steamcommunity.bet/providers";
 import { and, desc, eq } from "drizzle-orm";
@@ -152,6 +154,7 @@ async function generateReport(steamId64: string, sourcePath: string, forceProvid
   const scored = scoreReport(steamId64, caches, reports.count);
   const providerDetails = buildProviderDetails(caches);
   const steamDetails = providerDetails.steam;
+  const leetifyCoversStats = !providerDetails.csstats && providerDetails.leetify;
   const now = new Date();
   const freshness = Object.fromEntries(
     caches.map((cache) => [
@@ -161,8 +164,10 @@ async function generateReport(steamId64: string, sourcePath: string, forceProvid
   );
   const missingData = caches
     .filter((cache) => cache.fetchStatus !== "success")
+    .filter((cache) => !(leetifyCoversStats && cache.provider === "csstats"))
     .map((cache) => `${cache.provider}: ${cache.errorMessage ?? cache.fetchStatus}`);
   const missingProviders = (["steam", "steam_bans", "leetify", "csstats"] as const)
+    .filter((provider) => !(leetifyCoversStats && provider === "csstats"))
     .filter((provider) => !caches.some((cache) => cache.provider === provider))
     .map((provider) => `${provider}: not fetched`);
   const strongestEvidence = scored.signals
@@ -472,6 +477,18 @@ function buildProviderDetails(caches: Array<typeof providerCache.$inferSelect>) 
   const csstats = caches.find(
     (cache) => cache.provider === "csstats" && cache.fetchStatus === "success",
   )?.rawPayload as CSStatsPlayerProfile | null | undefined;
+  const leetify = caches.find(
+    (cache) => cache.provider === "leetify" && cache.fetchStatus === "success",
+  )?.rawPayload as LeetifyProfile | null | undefined;
+  const leetifyStats = buildLeetifyProfileStats(
+    csstats?.steamId64 ?? leetify?.steam64Id ?? "",
+    leetify,
+  );
+  const profileStats = csstats
+    ? providerStats("csstats", "CSStats", csstats)
+    : leetifyStats
+      ? providerStats("leetify", "Leetify", leetifyStats)
+      : null;
   return {
     steam: steam
       ? {
@@ -481,29 +498,48 @@ function buildProviderDetails(caches: Array<typeof providerCache.$inferSelect>) 
           visibilityState: steam.visibilityState,
         }
       : null,
-    csstats: csstats
-      ? {
-          name: csstats.name,
-          profileUrl: csstats.profileUrl,
-          statsUrl: csstats.statsUrl,
-          premierRating: csstats.premierRating,
-          bestPremierRating: csstats.bestPremierRating,
-          bestRating: csstats.bestRating,
-          hasFaceit: csstats.hasFaceit,
-          kdRatio: csstats.kdRatio,
-          hltvRating: csstats.hltvRating,
-          matches: csstats.matches,
-          winRate: csstats.winRate,
-          hsPercentage: csstats.hsPercentage,
-          adr: csstats.adr,
-          clutchPercentage: csstats.clutchPercentage,
-          recentResults: csstats.recentResults,
-          mostPlayedMap: csstats.mostPlayedMap,
-          premierRatings: csstats.premierRatings,
-          competitiveRanks: csstats.competitiveRanks,
-          wingman: csstats.wingman,
-        }
-      : null,
+    csstats: csstats ? providerStats("csstats", "CSStats", csstats) : null,
+    leetify: leetifyStats ? providerStats("leetify", "Leetify", leetifyStats) : null,
+    profileStats,
+  };
+}
+
+function providerStats(
+  provider: "csstats" | "leetify",
+  label: "CSStats" | "Leetify",
+  stats: CSStatsPlayerProfile | ReturnType<typeof buildLeetifyProfileStats>,
+) {
+  if (!stats) {
+    return null;
+  }
+  return {
+    provider,
+    label,
+    name: stats.name,
+    profileUrl: stats.profileUrl,
+    statsUrl: stats.statsUrl,
+    premierRating: stats.premierRating,
+    bestPremierRating: stats.bestPremierRating,
+    bestRating: stats.bestRating,
+    hasFaceit: stats.hasFaceit,
+    kdRatio: stats.kdRatio,
+    hltvRating: stats.hltvRating,
+    matches: stats.matches,
+    winRate: stats.winRate,
+    hsPercentage: stats.hsPercentage,
+    adr: stats.adr,
+    clutchPercentage: stats.clutchPercentage,
+    recentResults: stats.recentResults,
+    mostPlayedMap: stats.mostPlayedMap,
+    premierRatings: stats.premierRatings,
+    competitiveRanks: stats.competitiveRanks,
+    wingman: stats.wingman,
+    aim: "aim" in stats ? stats.aim : null,
+    utility: "utility" in stats ? stats.utility : null,
+    positioning: "positioning" in stats ? stats.positioning : null,
+    opening: "opening" in stats ? stats.opening : null,
+    tLeetify: "tLeetify" in stats ? stats.tLeetify : null,
+    ctLeetify: "ctLeetify" in stats ? stats.ctLeetify : null,
   };
 }
 

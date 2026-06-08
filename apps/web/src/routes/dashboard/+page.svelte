@@ -17,13 +17,30 @@
 </script>
 
 {#if $sessionQuery.isPending}
-	<div>Loading...</div>
+	<div class="cs-shell">
+		<div class="cs-window">
+			<div class="cs-window-title"><p>Dashboard</p></div>
+			<div class="cs-window-body"><p>Loading...</p></div>
+		</div>
+	</div>
 {:else if !$sessionQuery.data}
-	<div>Redirecting to login...</div>
+	<div class="cs-shell">
+		<div class="cs-window">
+			<div class="cs-window-title"><p>Dashboard</p></div>
+			<div class="cs-window-body"><p>Redirecting to login...</p></div>
+		</div>
+	</div>
 {:else}
-	<div>
-		<h1>Dashboard</h1>
-		<p>Welcome {$sessionQuery.data.user.name}</p>
-		<p>API: {$privateDataQuery.data?.message}</p>
+	<div class="cs-shell">
+		<div class="cs-window">
+			<div class="cs-window-title"><p>Dashboard</p></div>
+			<div class="cs-window-body">
+				<section class="cs-panel">
+					<h1 class="text-3xl leading-none">Dashboard</h1>
+					<p class="mt-3">Welcome {$sessionQuery.data.user.name}</p>
+					<p class="cs-muted mt-2">API: {$privateDataQuery.data?.message}</p>
+				</section>
+			</div>
+		</div>
 	</div>
 {/if}
