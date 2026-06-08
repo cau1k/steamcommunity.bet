@@ -94,3 +94,40 @@ test("rage-level public stats cross the cheating threshold", () => {
     true,
   );
 });
+
+test("FACEIT ESEA membership reduces cheating score", () => {
+  const report = scoreReport(
+    "76561198000000001",
+    [
+      {
+        provider: "faceit",
+        fetchStatus: "success",
+        rawPayload: {
+          found: true,
+          faceitUrl: "https://www.faceit.com/en/players/pro",
+          hasEsea: true,
+          hasPremium: true,
+        },
+      },
+      {
+        provider: "csstats",
+        fetchStatus: "success",
+        rawPayload: {
+          steamId64: "76561198000000001",
+          profileUrl: "https://csgostats.gg/player/76561198000000001",
+          statsUrl: "https://csgostats.gg/player/76561198000000001/stats",
+          matches: 25,
+          hltvRating: 2.6,
+          kdRatio: 5.1,
+          adr: 151,
+          premierRatings: [],
+        },
+      },
+    ],
+    0,
+  );
+
+  assert.equal(report.score, 27);
+  assert.equal(report.verdict, "likely_not_cheating");
+  assert.ok(report.signals.some((signal) => signal.signal === "faceit_esea_member"));
+});

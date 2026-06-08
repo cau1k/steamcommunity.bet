@@ -7,6 +7,8 @@ const faceitPlayerSchema = z
     avatar: z.string().nullable().optional(),
     country: z.string().nullable().optional(),
     faceit_url: z.string().nullable().optional(),
+    membership_type: z.string().nullable().optional(),
+    memberships: z.array(z.string()).optional(),
     games: z
       .object({
         cs2: z
@@ -73,6 +75,10 @@ export type FaceitProfile = {
   gamePlayerName: string | null;
   lastPlayedAt: string | null;
   lastPlayedGame: "cs2" | "csgo" | null;
+  membershipType: string | null;
+  memberships: string[];
+  hasPremium: boolean;
+  hasEsea: boolean;
 };
 
 export function createFaceitClient(config: FaceitClientConfig = {}) {
@@ -156,6 +162,10 @@ export function createFaceitClient(config: FaceitClientConfig = {}) {
           gamePlayerName: game?.game_player_name ?? null,
           lastPlayedAt: lastPlayed?.at ?? null,
           lastPlayedGame: lastPlayed?.game ?? null,
+          membershipType: payload.membership_type || null,
+          memberships: payload.memberships ?? [],
+          hasPremium: hasMembership(payload.memberships, "premium"),
+          hasEsea: hasMembership(payload.memberships, "esea"),
         };
       } finally {
         clearTimeout(timeout);
@@ -179,5 +189,15 @@ function missingFaceitProfile(steamId64: string): FaceitProfile {
     gamePlayerName: null,
     lastPlayedAt: null,
     lastPlayedGame: null,
+    membershipType: null,
+    memberships: [],
+    hasPremium: false,
+    hasEsea: false,
   };
+}
+
+function hasMembership(memberships: string[] | undefined, value: string) {
+  return Boolean(
+    memberships?.some((membership) => membership.toLowerCase() === value.toLowerCase()),
+  );
 }

@@ -101,6 +101,25 @@ function buildSignals(
   const hasFaceit = faceit?.found === true;
   const lacksFaceit =
     faceit?.found === false || (faceit === undefined && csstats?.hasFaceit === false);
+  if (faceit?.hasEsea) {
+    signals.push({
+      provider: "faceit",
+      signal: "faceit_esea_member",
+      value: "FACEIT account has ESEA membership",
+      weight: -20,
+      confidence: "high",
+      sourceUrl: faceit.faceitUrl,
+    });
+  } else if (faceit?.hasPremium) {
+    signals.push({
+      provider: "faceit",
+      signal: "faceit_premium_member",
+      value: "FACEIT account has Premium membership",
+      weight: -10,
+      confidence: "medium",
+      sourceUrl: faceit.faceitUrl,
+    });
+  }
   if (csstats?.premierRating && csstats.premierRating >= 24_000 && lacksFaceit) {
     signals.push({
       provider: "csstats",

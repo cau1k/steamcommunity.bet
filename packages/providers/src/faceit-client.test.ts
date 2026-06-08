@@ -21,6 +21,8 @@ test("looks up FACEIT profile by Steam id", async () => {
           avatar: "https://faceit.test/avatar.png",
           country: "us",
           faceit_url: "https://www.faceit.com/en/players/piewhat",
+          membership_type: "",
+          memberships: ["premium", "esea"],
           games: {
             cs2: {
               faceit_elo: 2401,
@@ -54,6 +56,9 @@ test("looks up FACEIT profile by Steam id", async () => {
   assert.equal(profile.elo, 2401);
   assert.equal(profile.lastPlayedAt, "2025-01-15T12:00:00.000Z");
   assert.equal(profile.lastPlayedGame, "cs2");
+  assert.equal(profile.hasPremium, true);
+  assert.equal(profile.hasEsea, true);
+  assert.deepEqual(profile.memberships, ["premium", "esea"]);
 });
 
 test("treats FACEIT 404 as checked missing account", async () => {

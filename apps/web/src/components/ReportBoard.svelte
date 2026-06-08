@@ -60,6 +60,10 @@
 				elo: number | null;
 				lastPlayedAt: string | null;
 				lastPlayedGame: 'cs2' | 'csgo' | null;
+				membershipType: string | null;
+				memberships: string[];
+				hasPremium: boolean;
+				hasEsea: boolean;
 			} | null;
 		};
 	};
@@ -223,6 +227,7 @@
 				]
 			: []
 	);
+	const faceitHeaderStats = $derived(faceit ? faceitMembershipStats(faceit) : []);
 	const evidenceRows = $derived(
 		report?.strongestEvidenceDetails?.length
 			? report.strongestEvidenceDetails.map((item) => ({
@@ -422,6 +427,20 @@
 			return null;
 		}
 		return `FACEIT inactive over 1 year: last played ${lastPlayed.toLocaleDateString()}`;
+	}
+
+	function faceitMembershipStats(profile: FaceitDetails) {
+		const rows: string[] = [];
+		if (profile.hasPremium) {
+			rows.push('Premium');
+		}
+		if (profile.hasEsea) {
+			rows.push('ESEA');
+		}
+		if (!rows.length && profile.membershipType) {
+			rows.push(profile.membershipType);
+		}
+		return rows;
 	}
 
 	function freshnessStatus(value: string) {
@@ -712,6 +731,13 @@
 											{/if}
 											{#if source.label === 'FACEIT' && source.missing}
 												<p class="cs-source-missing">FACEIT account not found</p>
+											{/if}
+											{#if source.label === 'FACEIT' && !source.missing && faceitHeaderStats.length}
+												<div class="cs-faceit-badges" aria-label="FACEIT membership badges">
+													{#each faceitHeaderStats as badge}
+														<span>{badge}</span>
+													{/each}
+												</div>
 											{/if}
 											{#if source.label === 'FACEIT' && faceitStaleWarning}
 												<p class="cs-source-warning">{faceitStaleWarning}</p>

@@ -762,6 +762,10 @@ function faceitDetails(profile: FaceitProfile) {
     elo: profile.elo,
     lastPlayedAt: profile.lastPlayedAt,
     lastPlayedGame: profile.lastPlayedGame,
+    membershipType: profile.membershipType,
+    memberships: profile.memberships,
+    hasPremium: profile.hasPremium,
+    hasEsea: profile.hasEsea,
   };
 }
 
