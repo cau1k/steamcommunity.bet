@@ -114,6 +114,33 @@ function buildSignals(
   if (csstats?.matches && csstats.matches >= 20) {
     if (
       typeof csstats.hltvRating === "number" &&
+      csstats.hltvRating >= 2.5 &&
+      typeof csstats.kdRatio === "number" &&
+      csstats.kdRatio >= 5 &&
+      typeof csstats.adr === "number" &&
+      csstats.adr >= 150
+    ) {
+      signals.push({
+        provider: "csstats",
+        signal: "csstats_rage_statline",
+        value: `HLTV ${csstats.hltvRating}; K/D ${csstats.kdRatio}; ADR ${csstats.adr} over ${csstats.matches} matches`,
+        weight: 35,
+        confidence: "high",
+        sourceUrl: csstats.statsUrl,
+      });
+    }
+    if (typeof csstats.hsPercentage === "number" && csstats.hsPercentage >= 80) {
+      signals.push({
+        provider: "csstats",
+        signal: "csstats_extreme_headshot_rate",
+        value: `${csstats.hsPercentage}% HS over ${csstats.matches} matches`,
+        weight: 12,
+        confidence: "high",
+        sourceUrl: csstats.statsUrl,
+      });
+    }
+    if (
+      typeof csstats.hltvRating === "number" &&
       csstats.hltvRating >= 1.3 &&
       typeof csstats.kdRatio === "number" &&
       csstats.kdRatio >= 1.35 &&
@@ -166,6 +193,26 @@ function buildSignals(
       sourceUrl: `https://leetify.com/app/profile/${steamId64}`,
     });
   }
+  if (typeof leetify?.rating === "number" && leetify.rating >= 15) {
+    signals.push({
+      provider: "leetify",
+      signal: "leetify_rage_rating",
+      value: `Leetify rating ${leetify.rating}`,
+      weight: 25,
+      confidence: "high",
+      sourceUrl: `https://leetify.com/app/profile/${steamId64}`,
+    });
+  }
+  if (typeof leetifyStats?.aim === "number" && leetifyStats.aim >= 95) {
+    signals.push({
+      provider: "leetify",
+      signal: "leetify_extreme_aim",
+      value: `Aim ${leetifyStats.aim}`,
+      weight: 15,
+      confidence: "high",
+      sourceUrl: leetifyStats.profileUrl,
+    });
+  }
   if (
     !csstats &&
     leetifyStats?.premierRating &&
@@ -183,6 +230,21 @@ function buildSignals(
     });
   }
   if (!csstats && leetifyStats?.matches && leetifyStats.matches >= 20) {
+    if (
+      typeof leetifyStats.bestRating === "number" &&
+      leetifyStats.bestRating >= 15 &&
+      typeof leetifyStats.kdRatio === "number" &&
+      leetifyStats.kdRatio >= 5
+    ) {
+      signals.push({
+        provider: "leetify",
+        signal: "leetify_rage_statline",
+        value: `Leetify ${leetifyStats.bestRating}; K/D ${leetifyStats.kdRatio.toFixed(2)} over ${leetifyStats.matches} matches`,
+        weight: 30,
+        confidence: "high",
+        sourceUrl: leetifyStats.statsUrl,
+      });
+    }
     if (
       typeof leetifyStats.bestRating === "number" &&
       leetifyStats.bestRating >= 8 &&

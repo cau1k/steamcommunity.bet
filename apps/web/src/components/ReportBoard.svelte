@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { authClient } from '$lib/auth-client';
 	import { orpc } from '$lib/orpc';
+	import ThumbsDownSharpIcon from '@iconify-svelte/pixelarticons/thumbs-down-sharp';
+	import ThumbsUpSharpIcon from '@iconify-svelte/pixelarticons/thumbs-up-sharp';
 	import { createMutation, createQuery } from '@tanstack/svelte-query';
 
 	type Props = {
@@ -11,6 +13,12 @@
 		verdict: 'likely_cheating' | 'likely_not_cheating';
 		explanation: string;
 		strongestEvidence: string[];
+		strongestEvidenceDetails?: Array<{
+			signal: string;
+			value: string;
+			weight: number;
+			confidence: 'low' | 'medium' | 'high';
+		}>;
 		missingData: string[];
 		providerFreshness: Record<string, string>;
 		refreshedAt: string | Date;
@@ -18,6 +26,19 @@
 		reportCount: number;
 		accusationReportCount: number;
 		legitReportCount: number;
+		recentCheatingReports: Array<{
+			id: number;
+			reporterName: string;
+			reason: string;
+			notes: string | null;
+			createdAt: string | Date;
+		}>;
+		viewerPlayerReport: {
+			id: number;
+			reason: string;
+			notes: string | null;
+			createdAt: string | Date;
+		} | null;
 		providerDetails?: {
 			steam?: {
 				name: string | null;
@@ -36,6 +57,8 @@
 				faceitUrl: string | null;
 				skillLevel: number | null;
 				elo: number | null;
+				lastPlayedAt: string | null;
+				lastPlayedGame: 'cs2' | 'csgo' | null;
 			} | null;
 		};
 	};
@@ -149,6 +172,8 @@
 	const faceit = $derived(report?.providerDetails?.faceit);
 	const leetify = $derived(report?.providerDetails?.leetify);
 	const profileStats = $derived(report?.providerDetails?.profileStats ?? csstats);
+	const faceitStaleWarning = $derived(faceitActivityWarning(faceit));
+	const viewerHasPlayerReport = $derived(Boolean(report?.viewerPlayerReport));
 	const sourceLinks = $derived(
 		report ? withFaceitSource(report.sourceLinks, faceit, profileStats?.hasFaceit) : []
 	);
@@ -197,13 +222,20 @@
 			: []
 	);
 	const evidenceRows = $derived(
-		(report?.strongestEvidence ?? []).map((item) => {
-			const [signal, ...rest] = item.split(': ');
-			return {
-				label: humanSignal(signal),
-				value: rest.join(': ') || item
-			};
-		})
+		report?.strongestEvidenceDetails?.length
+			? report.strongestEvidenceDetails.map((item) => ({
+					label: humanSignal(item.signal),
+					value: item.value,
+					tone: evidenceTone(item.weight)
+				}))
+			: (report?.strongestEvidence ?? []).map((item) => {
+					const [signal, ...rest] = item.split(': ');
+					return {
+						label: humanSignal(signal),
+						value: rest.join(': ') || item,
+						tone: 'low'
+					};
+				})
 	);
 	const missingRows = $derived(
 		(report?.missingData ?? []).map((item) => {
@@ -361,11 +393,33 @@
 			.replace('Faceit', 'FACEIT');
 	}
 
+	function evidenceTone(weight: number) {
+		if (weight >= 20) return 'high';
+		if (weight >= 8) return 'medium';
+		return 'low';
+	}
+
 	function humanMissingMessage(message: string) {
 		if (message === 'not fetched') return 'Not fetched yet';
 		if (message === 'missing_config') return 'Provider not configured';
 		if (/404/.test(message)) return 'No public profile';
 		return message;
+	}
+
+	function faceitActivityWarning(profile: FaceitDetails | null | undefined) {
+		if (!profile?.found || !profile.lastPlayedAt) {
+			return null;
+		}
+		const lastPlayed = new Date(profile.lastPlayedAt);
+		if (Number.isNaN(lastPlayed.getTime())) {
+			return null;
+		}
+		const oneYearAgo = new Date();
+		oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+		if (lastPlayed > oneYearAgo) {
+			return null;
+		}
+		return `FACEIT inactive over 1 year: last played ${lastPlayed.toLocaleDateString()}`;
 	}
 
 	function freshnessStatus(value: string) {
@@ -419,6 +473,11 @@
 		return verdict === 'likely_not_cheating'
 			? 'Reporter agrees the player is likely not cheating'
 			: 'Reporter disputes the likely cheating verdict';
+	}
+
+	function reportReasonLabel(reason: string) {
+		if (reason === 'legit') return 'not cheating / legit';
+		return reason;
 	}
 
 	function rankName(rank: number | null | undefined) {
@@ -525,17 +584,10 @@
 							</a>
 							<div class="min-w-0 flex-1">
 								<div class="cs-rank-and-name">
-									<a class="cs-link min-w-0" href={steamProfileUrl}>
-										<h1 class="truncate text-3xl leading-none">{displayName}</h1>
-									</a>
-									<div class="cs-title-meta-stack">
-										<p
-											class="cs-title-verdict {report.verdict === 'likely_cheating'
-												? 'cs-verdict-danger'
-												: 'cs-verdict-safe'}"
-										>
-											{verdictLabel(report.verdict)}
-										</p>
+									<div class="cs-name-and-ranks">
+										<a class="cs-link min-w-0" href={steamProfileUrl}>
+											<h1 class="truncate text-3xl leading-none">{displayName}</h1>
+										</a>
 										<div class="cs-title-badges" aria-label="CS rank badges">
 											{#if currentPremier}
 												<div
@@ -575,6 +627,42 @@
 													/>
 												</a>
 											{/if}
+										</div>
+									</div>
+									<div class="cs-title-meta-stack">
+										<div class="cs-title-verdict-card cs-bevel-in">
+											<div class="min-w-0">
+												<p class="cs-label">Verdict</p>
+												<p
+													class="cs-title-verdict {report.verdict === 'likely_cheating'
+														? 'cs-verdict-danger'
+														: 'cs-verdict-safe'}"
+												>
+													{verdictLabel(report.verdict)}
+												</p>
+											</div>
+											<div class="cs-verdict-actions">
+												<button
+													class="cs-icon-btn cs-verdict-action --danger"
+													type="button"
+													disabled={isSubmittingReport}
+													aria-label="Accuse of cheating"
+													title="Accuse of cheating"
+													onclick={() => openReportModal('up')}
+												>
+													<ThumbsUpSharpIcon height="1em" />
+												</button>
+												<button
+													class="cs-icon-btn cs-verdict-action --safe"
+													type="button"
+													disabled={isSubmittingReport}
+													aria-label="Dispute cheating"
+													title="Dispute cheating"
+													onclick={() => openReportModal('down')}
+												>
+													<ThumbsDownSharpIcon height="1em" />
+												</button>
+											</div>
 										</div>
 									</div>
 								</div>
@@ -621,6 +709,9 @@
 											{#if source.label === 'FACEIT' && source.missing}
 												<p class="cs-source-missing">FACEIT account not found</p>
 											{/if}
+											{#if source.label === 'FACEIT' && faceitStaleWarning}
+												<p class="cs-source-warning">{faceitStaleWarning}</p>
+											{/if}
 										</div>
 									{/each}
 								</div>
@@ -637,9 +728,8 @@
 						{#if evidenceRows.length}
 							<ul class="mt-3 grid gap-2">
 								{#each evidenceRows as evidence}
-									<li class="cs-panel-inset cs-bevel-in cs-evidence-row text-(--cs-text-2)">
-										<span class="cs-chip w-fit text-(--cs-accent)">{evidence.label}</span>
-										<span>{evidence.value}</span>
+									<li class="cs-evidence-row --{evidence.tone}">
+										<span class="cs-evidence-title">{evidence.label}</span><span>: {evidence.value}</span>
 									</li>
 								{/each}
 							</ul>
@@ -666,7 +756,22 @@
 								</p>
 							</div>
 						</div>
-						{#if $sessionQuery.data?.user}
+						{#if report.recentCheatingReports?.length}
+							<div class="cs-report-list mt-4" aria-label="Recent cheating reports">
+								{#each report.recentCheatingReports as playerReport}
+									<div class="cs-report-list-item">
+										<div class="flex min-w-0 items-baseline gap-2">
+											<span class="cs-report-reporter">{playerReport.reporterName}</span>
+											<span class="cs-report-reason">{reportReasonLabel(playerReport.reason)}</span>
+										</div>
+										{#if playerReport.notes}
+											<p>{playerReport.notes}</p>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						{/if}
+						{#if $sessionQuery.data?.user && !viewerHasPlayerReport}
 							<div class="mt-4 flex flex-wrap gap-2">
 								<button
 									class="cs-btn --danger"
@@ -685,6 +790,10 @@
 									Dispute cheating
 								</button>
 							</div>
+						{:else if $sessionQuery.data?.user && viewerHasPlayerReport}
+							<p class="mt-4 text-sm text-[var(--cs-text-3)]">
+								Your report is already recorded.
+							</p>
 						{:else}
 							<p class="mt-4 text-sm">
 								<a class="cs-link" href="/login">Sign in with Steam</a>

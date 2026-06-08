@@ -12,6 +12,7 @@
     "dev:bare": "vite dev"
   },
   "dependencies": {
+    "@iconify-svelte/pixelarticons": "^1.0.5",
     "@orpc/client": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/tanstack-query": "^1.13.14",

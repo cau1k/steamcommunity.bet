@@ -1,4 +1,5 @@
 import { createDb } from "@steamcommunity.bet/db";
+import { user } from "@steamcommunity.bet/db/schema/auth";
 import {
   cheatSignal,
   generatedReport,
@@ -46,13 +47,13 @@ export const reportRouter = {
   },
 
   report: {
-    get: publicProcedure.input(steamIdInput).handler(async ({ input }) => {
-      return getLatestReport(input.steamId64);
+    get: publicProcedure.input(steamIdInput).handler(async ({ context, input }) => {
+      return getLatestReport(input.steamId64, context.session?.user.id);
     }),
 
     getOrGenerate: publicProcedure.input(resolveInput).handler(async ({ context, input }) => {
       const resolved = await resolveProfile(input.path);
-      const current = await getLatestReport(resolved.steamId64);
+      const current = await getLatestReport(resolved.steamId64, context.session?.user.id);
       if (current) {
         const refreshQueued = await queueRefreshIfStale(
           context.waitUntil,
@@ -62,13 +63,23 @@ export const reportRouter = {
         );
         return { resolved, report: current, refreshQueued };
       }
-      const report = await generateReport(resolved.steamId64, resolved.sourcePath);
+      const report = await generateReport(
+        resolved.steamId64,
+        resolved.sourcePath,
+        false,
+        context.session?.user.id,
+      );
       return { resolved, report, refreshQueued: false };
     }),
 
-    refresh: publicProcedure.input(resolveInput).handler(async ({ input }) => {
+    refresh: publicProcedure.input(resolveInput).handler(async ({ context, input }) => {
       const resolved = await resolveProfile(input.path);
-      const report = await generateReport(resolved.steamId64, resolved.sourcePath, true);
+      const report = await generateReport(
+        resolved.steamId64,
+        resolved.sourcePath,
+        true,
+        context.session?.user.id,
+      );
       return { resolved, report };
     }),
 
@@ -150,7 +161,12 @@ async function resolveProfile(path: string) {
   return { steamId64, sourcePath: `/id/${vanity}`, vanity };
 }
 
-async function generateReport(steamId64: string, sourcePath: string, forceProviders = false) {
+async function generateReport(
+  steamId64: string,
+  sourcePath: string,
+  forceProviders = false,
+  viewerUserId?: string,
+) {
   await ensureSteamProfile(steamId64, null);
   const providerResults = await Promise.allSettled([
     refreshProvider(steamId64, "steam", forceProviders),
@@ -167,7 +183,7 @@ async function generateReport(steamId64: string, sourcePath: string, forceProvid
 
   const db = createDb();
   const caches = await db.select().from(providerCache).where(eq(providerCache.steamId, steamId64));
-  const reports = await listPlayerReports(steamId64);
+  const reports = await listPlayerReports(steamId64, viewerUserId);
   const scored = scoreReport(steamId64, caches, reports.accusationCount);
   const providerDetails = buildProviderDetails(caches);
   const steamDetails = providerDetails.steam;
@@ -187,10 +203,9 @@ async function generateReport(steamId64: string, sourcePath: string, forceProvid
     .filter((provider) => !(leetifyCoversStats && provider === "csstats"))
     .filter((provider) => !caches.some((cache) => cache.provider === provider))
     .map((provider) => `${provider}: not fetched`);
-  const strongestEvidence = scored.signals
-    .sort((a, b) => b.weight - a.weight)
-    .slice(0, 5)
-    .map((signal) => `${signal.signal}: ${signal.value}`);
+  const strongestSignals = [...scored.signals].sort((a, b) => b.weight - a.weight).slice(0, 5);
+  const strongestEvidence = strongestSignals.map((signal) => `${signal.signal}: ${signal.value}`);
+  const strongestEvidenceDetails = strongestSignals.map(signalDetail);
   const sourceLinks = [
     {
       label: "Steam",
@@ -252,9 +267,10 @@ async function generateReport(steamId64: string, sourcePath: string, forceProvid
     })
     .returning();
   return attachProviderDetails(
-    inserted[0] ?? (await getLatestReport(steamId64)),
+    inserted[0] ?? (await getLatestReport(steamId64, viewerUserId)),
     providerDetails,
     reports,
+    strongestEvidenceDetails,
   );
 }
 
@@ -434,9 +450,9 @@ async function upsertProviderCache(row: typeof providerCache.$inferInsert) {
     });
 }
 
-async function getLatestReport(steamId64: string) {
+async function getLatestReport(steamId64: string, viewerUserId?: string) {
   const db = createDb();
-  const [report, initialCaches, reports] = await Promise.all([
+  const [report, initialCaches, reports, signalRows] = await Promise.all([
     db
       .select()
       .from(generatedReport)
@@ -444,7 +460,13 @@ async function getLatestReport(steamId64: string) {
       .orderBy(desc(generatedReport.refreshedAt))
       .get(),
     db.select().from(providerCache).where(eq(providerCache.steamId, steamId64)),
-    listPlayerReports(steamId64),
+    listPlayerReports(steamId64, viewerUserId),
+    db
+      .select()
+      .from(cheatSignal)
+      .where(eq(cheatSignal.steamId, steamId64))
+      .orderBy(desc(cheatSignal.weight))
+      .limit(5),
   ]);
   let caches = initialCaches;
   if (!report) {
@@ -465,6 +487,7 @@ async function getLatestReport(steamId64: string) {
     },
     buildProviderDetails(caches),
     reports,
+    signalRows.map(signalDetail),
   );
 }
 
@@ -481,19 +504,51 @@ function hasFakeCalibrationSteamCache(
   return steam?.personaName === "Calibration target";
 }
 
-async function listPlayerReports(steamId64: string) {
+async function listPlayerReports(steamId64: string, viewerUserId?: string) {
   const db = createDb();
   const rows = await db
-    .select()
+    .select({
+      id: playerReport.id,
+      reporterUserId: playerReport.reporterUserId,
+      steamId: playerReport.steamId,
+      reason: playerReport.reason,
+      notes: playerReport.notes,
+      status: playerReport.status,
+      createdAt: playerReport.createdAt,
+      reporterName: user.name,
+    })
     .from(playerReport)
+    .leftJoin(user, eq(playerReport.reporterUserId, user.id))
     .where(and(eq(playerReport.steamId, steamId64), eq(playerReport.status, "active")))
     .orderBy(desc(playerReport.createdAt));
   const accusationCount = rows.filter((row) => row.reason !== "legit").length;
   const legitCount = rows.filter((row) => row.reason === "legit").length;
+  const recentCheatingReports = rows
+    .filter((row) => row.reason !== "legit")
+    .slice(0, 8)
+    .map((row) => ({
+      id: row.id,
+      reporterName: row.reporterName ?? "Steam user",
+      reason: row.reason,
+      notes: row.notes,
+      createdAt: row.createdAt,
+    }));
+  const viewerReport = viewerUserId
+    ? rows.find((row) => row.reporterUserId === viewerUserId)
+    : undefined;
   return {
     count: rows.length,
     accusationCount,
     legitCount,
+    recentCheatingReports,
+    viewerReport: viewerReport
+      ? {
+          id: viewerReport.id,
+          reason: viewerReport.reason,
+          notes: viewerReport.notes,
+          createdAt: viewerReport.createdAt,
+        }
+      : null,
     reports: rows,
   };
 }
@@ -653,6 +708,8 @@ function faceitDetails(profile: FaceitProfile) {
     faceitUrl: profile.faceitUrl,
     skillLevel: profile.skillLevel,
     elo: profile.elo,
+    lastPlayedAt: profile.lastPlayedAt,
+    lastPlayedGame: profile.lastPlayedGame,
   };
 }
 
@@ -701,16 +758,41 @@ function attachProviderDetails<T extends { reportCount?: number } | undefined>(
   report: T,
   providerDetails: ReturnType<typeof buildProviderDetails>,
   reportCounts?: Awaited<ReturnType<typeof listPlayerReports>>,
+  strongestEvidenceDetails?: EvidenceDetail[],
 ) {
   return report
     ? {
         ...report,
         providerDetails,
+        strongestEvidenceDetails: strongestEvidenceDetails ?? [],
+        recentCheatingReports: reportCounts?.recentCheatingReports ?? [],
+        viewerPlayerReport: reportCounts?.viewerReport ?? null,
         accusationReportCount:
           reportCounts?.accusationCount ?? ("reportCount" in report ? report.reportCount : 0),
         legitReportCount: reportCounts?.legitCount ?? 0,
       }
     : report;
+}
+
+type EvidenceDetail = {
+  signal: string;
+  value: string;
+  weight: number;
+  confidence: "low" | "medium" | "high";
+};
+
+function signalDetail(signal: {
+  signal: string;
+  value: string;
+  weight: number;
+  confidence: "low" | "medium" | "high";
+}): EvidenceDetail {
+  return {
+    signal: signal.signal,
+    value: signal.value,
+    weight: signal.weight,
+    confidence: signal.confidence,
+  };
 }
 
 function stableHash(value: unknown) {

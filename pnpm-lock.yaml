@@ -142,6 +142,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@iconify-svelte/pixelarticons':
+        specifier: ^1.0.5
+        version: 1.0.5(svelte@5.56.3)
       '@orpc/client':
         specifier: 'catalog:'
         version: 1.14.5
@@ -1280,6 +1283,17 @@ packages:
 
   '@iarna/toml@2.2.5':
     resolution: {integrity: sha512-trnsAYxU3xnS1gPHPyU961coFyLkh4gAD/0zQ5mymY4yOZ+CYvsPqUbOFSw0aDM4y0tV7tiFxL/1XfXPNC6IPg==}
+
+  '@iconify-svelte/pixelarticons@1.0.5':
+    resolution: {integrity: sha512-eZoQDq0gLgxoVxowHUf0+UTayciXHnVHYbzT5a0VPge/Mcrj4aeNN7M6Ukm8UX/uE/XZ8deEE5STC+0NprAsGw==}
+
+  '@iconify/css-svelte@1.0.1':
+    resolution: {integrity: sha512-f9w1anXXBm48VjDEWDrGTybdiwnDTIChcUpBK/UtXR/AhNp/Co/VPp00t7dO93j+4Je0OwMKyc/HvI7Lpv3PKg==}
+    peerDependencies:
+      svelte: '>4.0.0'
+
+  '@iconify/types@2.0.0':
+    resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
 
   '@img/colour@1.1.0':
     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
@@ -4365,6 +4379,19 @@ snapshots:
     optional: true
 
   '@iarna/toml@2.2.5': {}
+
+  '@iconify-svelte/pixelarticons@1.0.5(svelte@5.56.3)':
+    dependencies:
+      '@iconify/css-svelte': 1.0.1(svelte@5.56.3)
+    transitivePeerDependencies:
+      - svelte
+
+  '@iconify/css-svelte@1.0.1(svelte@5.56.3)':
+    dependencies:
+      '@iconify/types': 2.0.0
+      svelte: 5.56.3
+
+  '@iconify/types@2.0.0': {}
 
   '@img/colour@1.1.0': {}
 

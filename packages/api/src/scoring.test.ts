@@ -39,3 +39,58 @@ test("signed-in report weighting only represents cheating accusations", () => {
     [["signed_in_accusations", "1 active signed-in cheating accusation(s)", 2]],
   );
 });
+
+test("rage-level public stats cross the cheating threshold", () => {
+  const steamId64 = "76561198812139914";
+  const report = scoreReport(
+    steamId64,
+    [
+      {
+        provider: "csstats",
+        fetchStatus: "success",
+        rawPayload: {
+          steamId64,
+          profileUrl: `https://csgostats.gg/player/${steamId64}`,
+          statsUrl: `https://csgostats.gg/player/${steamId64}/stats`,
+          premierRating: 26_713,
+          bestPremierRating: 26_713,
+          hasFaceit: true,
+          kdRatio: 13.12,
+          hltvRating: 3.41,
+          matches: 27,
+          winRate: 85,
+          hsPercentage: 89,
+          adr: 225,
+          clutchPercentage: 70,
+          premierRatings: [],
+          competitiveRanks: [],
+          recentResults: [],
+          mostPlayedMap: "cs_office",
+          wingman: null,
+        },
+      },
+      {
+        provider: "leetify",
+        fetchStatus: "success",
+        rawPayload: {
+          steam64Id: steamId64,
+          rating: 23.12,
+          recentGameRatings: {
+            aim: 99.96,
+          },
+        },
+      },
+    ] as never,
+    0,
+  );
+
+  assert.equal(report.verdict, "likely_cheating");
+  assert.equal(
+    report.signals.some((signal) => signal.signal === "csstats_rage_statline"),
+    true,
+  );
+  assert.equal(
+    report.signals.some((signal) => signal.signal === "leetify_rage_rating"),
+    true,
+  );
+});

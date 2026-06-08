@@ -37,6 +37,21 @@ const faceitPlayerSchema = z
   })
   .passthrough();
 
+const faceitHistorySchema = z
+  .object({
+    items: z
+      .array(
+        z
+          .object({
+            finished_at: z.number().nullable().optional(),
+            started_at: z.number().nullable().optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+  })
+  .passthrough();
+
 export type FaceitClientConfig = {
   apiKey?: string;
   baseUrl?: string;
@@ -56,6 +71,8 @@ export type FaceitProfile = {
   elo: number | null;
   gamePlayerId: string | null;
   gamePlayerName: string | null;
+  lastPlayedAt: string | null;
+  lastPlayedGame: "cs2" | "csgo" | null;
 };
 
 export function createFaceitClient(config: FaceitClientConfig = {}) {
@@ -68,6 +85,37 @@ export function createFaceitClient(config: FaceitClientConfig = {}) {
       throw new Error("FACEIT_API_KEY is required for FACEIT provider calls");
     }
     return config.apiKey;
+  }
+
+  async function getLastPlayed(playerId: string) {
+    return (
+      (await getLastPlayedForGame(playerId, "cs2")) ??
+      (await getLastPlayedForGame(playerId, "csgo"))
+    );
+  }
+
+  async function getLastPlayedForGame(playerId: string, game: "cs2" | "csgo") {
+    const url = new URL(`players/${playerId}/history`, normalizedBaseUrl);
+    url.searchParams.set("game", game);
+    url.searchParams.set("from", "0");
+    url.searchParams.set("to", Math.floor(Date.now() / 1000).toString());
+    url.searchParams.set("limit", "1");
+
+    const response = await fetchImpl(url, {
+      headers: {
+        Authorization: `Bearer ${requireApiKey()}`,
+      },
+    });
+    if (response.status === 404) {
+      return null;
+    }
+    if (!response.ok) {
+      throw new Error(`FACEIT history request failed: ${response.status}`);
+    }
+    const payload = faceitHistorySchema.parse(await response.json());
+    const latest = payload.items?.[0];
+    const timestamp = latest?.finished_at ?? latest?.started_at ?? null;
+    return timestamp ? { at: new Date(timestamp * 1000).toISOString(), game } : null;
   }
 
   return {
@@ -93,6 +141,7 @@ export function createFaceitClient(config: FaceitClientConfig = {}) {
         }
         const payload = faceitPlayerSchema.parse(await response.json());
         const game = payload.games?.cs2 ?? payload.games?.csgo ?? null;
+        const lastPlayed = await getLastPlayed(payload.player_id);
         return {
           steamId64,
           found: true,
@@ -105,6 +154,8 @@ export function createFaceitClient(config: FaceitClientConfig = {}) {
           elo: game?.faceit_elo ?? null,
           gamePlayerId: game?.game_player_id ?? null,
           gamePlayerName: game?.game_player_name ?? null,
+          lastPlayedAt: lastPlayed?.at ?? null,
+          lastPlayedGame: lastPlayed?.game ?? null,
         };
       } finally {
         clearTimeout(timeout);
@@ -126,5 +177,7 @@ function missingFaceitProfile(steamId64: string): FaceitProfile {
     elo: null,
     gamePlayerId: null,
     gamePlayerName: null,
+    lastPlayedAt: null,
+    lastPlayedGame: null,
   };
 }

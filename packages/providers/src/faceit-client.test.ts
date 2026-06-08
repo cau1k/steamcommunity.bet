@@ -9,27 +9,39 @@ test("looks up FACEIT profile by Steam id", async () => {
     apiKey: "test-key",
     baseUrl: "https://faceit.test/data/v4",
     fetch: async (input, init) => {
-      assert.equal(
-        String(input),
-        `https://faceit.test/data/v4/players?game=cs2&game_player_id=${steamId64}`,
-      );
       assert.ok(init);
       assert.equal((init.headers as Record<string, string>).Authorization, "Bearer test-key");
-      return Response.json({
-        player_id: "faceit-player-id",
-        nickname: "piewhat",
-        avatar: "https://faceit.test/avatar.png",
-        country: "us",
-        faceit_url: "https://www.faceit.com/en/players/piewhat",
-        games: {
-          cs2: {
-            faceit_elo: 2401,
-            game_player_id: steamId64,
-            game_player_name: "Piewhat",
-            skill_level: 10,
+
+      if (
+        String(input) === `https://faceit.test/data/v4/players?game=cs2&game_player_id=${steamId64}`
+      ) {
+        return Response.json({
+          player_id: "faceit-player-id",
+          nickname: "piewhat",
+          avatar: "https://faceit.test/avatar.png",
+          country: "us",
+          faceit_url: "https://www.faceit.com/en/players/piewhat",
+          games: {
+            cs2: {
+              faceit_elo: 2401,
+              game_player_id: steamId64,
+              game_player_name: "Piewhat",
+              skill_level: 10,
+            },
           },
-        },
-      });
+        });
+      }
+      const url = new URL(String(input));
+      if (url.pathname === "/data/v4/players/faceit-player-id/history") {
+        assert.equal(url.searchParams.get("game"), "cs2");
+        assert.equal(url.searchParams.get("from"), "0");
+        assert.equal(url.searchParams.get("limit"), "1");
+        assert.ok(url.searchParams.has("to"));
+        return Response.json({
+          items: [{ finished_at: 1_736_942_400 }],
+        });
+      }
+      assert.fail("unexpected FACEIT request");
     },
   });
 
@@ -40,6 +52,8 @@ test("looks up FACEIT profile by Steam id", async () => {
   assert.equal(profile.faceitUrl, "https://www.faceit.com/en/players/piewhat");
   assert.equal(profile.skillLevel, 10);
   assert.equal(profile.elo, 2401);
+  assert.equal(profile.lastPlayedAt, "2025-01-15T12:00:00.000Z");
+  assert.equal(profile.lastPlayedGame, "cs2");
 });
 
 test("treats FACEIT 404 as checked missing account", async () => {
