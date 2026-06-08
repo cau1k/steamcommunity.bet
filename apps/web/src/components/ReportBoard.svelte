@@ -735,7 +735,7 @@
 											{#if source.label === 'FACEIT' && !source.missing && faceitHeaderStats.length}
 												<div class="cs-faceit-badges" aria-label="FACEIT membership badges">
 													{#each faceitHeaderStats as badge}
-														<span>{badge}</span>
+														<span class:--esea={badge.toLowerCase() === 'esea'}>{badge}</span>
 													{/each}
 												</div>
 											{/if}

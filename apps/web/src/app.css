@@ -483,6 +483,10 @@ p {
   box-shadow: 1px 1px 0 var(--cs-black);
 }
 
+.cs-faceit-badges span.--esea {
+  background: color-mix(in srgb, #12b76a 28%, var(--cs-bg-2));
+}
+
 .cs-source-missing {
   color: var(--cs-danger);
   font-size: 14px;
