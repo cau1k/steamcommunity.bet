@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { authClient } from '$lib/auth-client';
 	import { orpc } from '$lib/orpc';
+	import { page } from '$app/state';
+	import { PUBLIC_SERVER_URL } from '$env/static/public';
 	import ThumbsDownSharpIcon from '@iconify-svelte/pixelarticons/thumbs-down-sharp';
 	import ThumbsUpSharpIcon from '@iconify-svelte/pixelarticons/thumbs-up-sharp';
 	import { createMutation, createQuery } from '@tanstack/svelte-query';
@@ -46,6 +48,24 @@
 				avatarUrl: string | null;
 				profileUrl: string | null;
 				visibilityState: number | null;
+				createdAt: string | null;
+				level: number | null;
+				inventory: {
+					accessible: boolean;
+					itemCount: number | null;
+					marketableItemCount: number | null;
+					pricedItemCount: number;
+					currency: 'USD';
+					estimatedValueCents: number | null;
+				} | null;
+				friends: {
+					accessible: boolean;
+					friendCount: number | null;
+					checkedFriendCount: number;
+					bannedFriendCount: number;
+					vacBannedFriendCount: number;
+					gameBannedFriendCount: number;
+				} | null;
 			} | null;
 			csstats?: ProfileStats | null;
 			leetify?: ProfileStats | null;
@@ -177,7 +197,6 @@
 	const faceit = $derived(report?.providerDetails?.faceit);
 	const leetify = $derived(report?.providerDetails?.leetify);
 	const profileStats = $derived(report?.providerDetails?.profileStats ?? csstats);
-	const faceitStaleWarning = $derived(faceitActivityWarning(faceit));
 	const viewerHasPlayerReport = $derived(Boolean(report?.viewerPlayerReport));
 	const viewerOwnsPlayer = $derived(Boolean(report?.viewerOwnsPlayer));
 	const sourceLinks = $derived(
@@ -227,6 +246,9 @@
 				]
 			: []
 	);
+	const steamHeaderStats = $derived(steam ? steamQuickStats(steam) : []);
+	const faceitActivityStats = $derived(faceit ? faceitCompetitiveStats(faceit) : []);
+	const faceitLevelBadge = $derived(faceitLevelBadgeUrl(faceit));
 	const faceitHeaderStats = $derived(faceit ? faceitMembershipStats(faceit) : []);
 	const evidenceRows = $derived(
 		report?.strongestEvidenceDetails?.length
@@ -256,33 +278,47 @@
 			};
 		})
 	);
-	const highestCurrentCompetitiveRank = $derived(
+	const highestCompetitiveRank = $derived(
 		(profileStats?.competitiveRanks ?? [])
-			.filter((rank) => typeof rank.latestRank === 'number')
-			.toSorted((a, b) => (b.latestRank ?? 0) - (a.latestRank ?? 0))[0] ?? null
+			.map((rank) => ({
+				...rank,
+				displayRank: rank.latestRank ?? rank.bestRank
+			}))
+			.filter((rank) => typeof rank.displayRank === 'number')
+			.toSorted((a, b) => (b.displayRank ?? 0) - (a.displayRank ?? 0))[0] ?? null
 	);
 	const currentPremier = $derived(
-		profileStats?.premierRating
+		displayPremierRating(profileStats)
 			? {
-					label: 'Current Premier',
-					value: profileStats.premierRating
+					label: profileStats?.premierRating ? 'Current Premier' : 'Previous Premier',
+					value: displayPremierRating(profileStats)
 				}
 			: null
 	);
-	const highestCurrentCompetitiveRankImage = $derived(
-		rankImageUrl(highestCurrentCompetitiveRank?.latestRank)
-	);
+	const highestCompetitiveRankImage = $derived(rankImageUrl(highestCompetitiveRank?.displayRank));
 	const currentPremierParts = $derived(premierParts(currentPremier?.value));
 	const lastRefreshedLabel = $derived(formatLastRefreshed(report?.refreshedAt));
 	const reportModalTitle = $derived(reportVote ? reportVoteTitle(reportVote, report?.verdict) : '');
 	const reportModalReason = $derived(reportVote ? reportVoteReason(reportVote, report?.verdict) : '');
 	const isSubmittingReport = $derived($playerReportMutation.isPending);
+	const reportSignInUrl = $derived(
+		`${PUBLIC_SERVER_URL}/api/auth/steam?callbackURL=${encodeURIComponent(page.url.href)}`
+	);
 
 	function refreshReport() {
 		$refreshReportMutation.mutate({ path: props.path });
 	}
 
-	function refresh(provider: 'steam' | 'steam_bans' | 'leetify' | 'csstats' | 'faceit') {
+	function refresh(
+		provider:
+			| 'steam'
+			| 'steam_bans'
+			| 'steam_friends'
+			| 'steam_inventory'
+			| 'leetify'
+			| 'csstats'
+			| 'faceit'
+	) {
 		if (!resolved) {
 			return;
 		}
@@ -323,6 +359,19 @@
 		return typeof value === 'number' ? new Intl.NumberFormat('en-US').format(value) : null;
 	}
 
+	function displayPremierRating(stats: ProfileStats | null | undefined) {
+		if (!stats) {
+			return null;
+		}
+		if (stats.premierRating && stats.premierRating > 0) {
+			return stats.premierRating;
+		}
+		const latestHistorical = stats.premierRatings.find(
+			(rating) => rating.latestRating && rating.latestRating > 0
+		)?.latestRating;
+		return latestHistorical ?? stats.bestPremierRating;
+	}
+
 	function formatDecimal(value: number | null | undefined) {
 		return typeof value === 'number' ? value.toFixed(2) : null;
 	}
@@ -343,6 +392,65 @@
 		if (value === true) return 'yes';
 		if (value === false) return 'no';
 		return null;
+	}
+
+	function formatCurrencyCents(value: number | null | undefined) {
+		return typeof value === 'number'
+			? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value / 100)
+			: null;
+	}
+
+	function formatAccountAge(value: string | null | undefined) {
+		if (!value) {
+			return null;
+		}
+		const createdAt = new Date(value);
+		if (Number.isNaN(createdAt.getTime())) {
+			return null;
+		}
+		const months = Math.max(
+			0,
+			(new Date().getFullYear() - createdAt.getFullYear()) * 12 +
+				new Date().getMonth() -
+				createdAt.getMonth()
+		);
+		if (months >= 24) {
+			return `${Math.floor(months / 12)}y`;
+		}
+		if (months >= 1) {
+			return `${months}mo`;
+		}
+		return '<1mo';
+	}
+
+	function steamQuickStats(profile: NonNullable<ProviderReport['providerDetails']>['steam']) {
+		if (!profile) {
+			return [];
+		}
+		const inventoryCents = profile.inventory?.estimatedValueCents ?? null;
+		const inventoryValue = profile.inventory?.accessible
+			? (formatCurrencyCents(inventoryCents) ?? '-')
+			: 'private';
+		const inventoryTone =
+			typeof inventoryCents === 'number' ? (inventoryCents > 40_000 ? 'high' : 'low') : null;
+		return [
+			{ label: 'Age', value: formatAccountAge(profile.createdAt), tone: null },
+			{ label: 'Level', value: formatNumber(profile.level) ?? '-', tone: null },
+			{ label: 'CS2 inv', value: inventoryValue, tone: inventoryTone },
+			{ label: 'Banned friends', value: steamFriendBanValue(profile.friends), tone: null }
+		].filter((stat) => stat.value);
+	}
+
+	function steamFriendBanValue(
+		friends: NonNullable<NonNullable<ProviderReport['providerDetails']>['steam']>['friends']
+	) {
+		if (!friends) {
+			return null;
+		}
+		if (!friends.accessible) {
+			return 'private';
+		}
+		return `${friends.bannedFriendCount}/${friends.checkedFriendCount}`;
 	}
 
 	function sourceIcon(label: string) {
@@ -386,6 +494,8 @@
 	function providerLabel(provider: string) {
 		if (provider === 'steam') return 'Steam';
 		if (provider === 'steam_bans') return 'Steam bans';
+		if (provider === 'steam_friends') return 'Steam friends';
+		if (provider === 'steam_inventory') return 'Steam inventory';
 		if (provider === 'csstats') return 'CSStats';
 		if (provider === 'leetify') return 'Leetify';
 		if (provider === 'faceit') return 'FACEIT';
@@ -413,20 +523,49 @@
 		return message;
 	}
 
-	function faceitActivityWarning(profile: FaceitDetails | null | undefined) {
-		if (!profile?.found || !profile.lastPlayedAt) {
-			return null;
+	function faceitCompetitiveStats(profile: FaceitDetails) {
+		if (!profile.found) {
+			return [];
 		}
-		const lastPlayed = new Date(profile.lastPlayedAt);
-		if (Number.isNaN(lastPlayed.getTime())) {
-			return null;
+		const lastPlayed = profile.lastPlayedAt ? new Date(profile.lastPlayedAt) : null;
+		const lastPlayedText =
+			lastPlayed && !Number.isNaN(lastPlayed.getTime())
+				? `last played ${formatRelativeAge(lastPlayed)}`
+				: null;
+		const lastPlayedTitle =
+			lastPlayed && !Number.isNaN(lastPlayed.getTime())
+				? `Last played ${lastPlayed.toLocaleDateString()}`
+				: null;
+		const active = lastPlayed ? faceitActive(lastPlayed) : false;
+		return [
+			{ label: 'ELO', value: formatNumber(profile.elo), title: null },
+			{ label: active ? 'Active' : 'Inactive', value: lastPlayedText, title: lastPlayedTitle }
+		].filter((stat) => stat.value);
+	}
+
+	function formatRelativeAge(value: Date) {
+		const days = Math.max(0, Math.floor((Date.now() - value.getTime()) / 86_400_000));
+		if (days < 60) {
+			return `${days || 1}d ago`;
 		}
+		const months = Math.floor(days / 30);
+		if (months < 24) {
+			return `${months}mo ago`;
+		}
+		return `${Math.floor(months / 12)}y ago`;
+	}
+
+	function faceitActive(lastPlayed: Date) {
 		const oneYearAgo = new Date();
 		oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-		if (lastPlayed > oneYearAgo) {
+		return lastPlayed > oneYearAgo;
+	}
+
+	function faceitLevelBadgeUrl(profile: FaceitDetails | null | undefined) {
+		if (!profile?.found || !profile.skillLevel || profile.skillLevel < 1 || profile.skillLevel > 10) {
 			return null;
 		}
-		return `FACEIT inactive over 1 year: last played ${lastPlayed.toLocaleDateString()}`;
+		return `/faceit-levels/${profile.skillLevel}.png`;
 	}
 
 	function faceitMembershipStats(profile: FaceitDetails) {
@@ -605,49 +744,144 @@
 							</a>
 							<div class="min-w-0 flex-1">
 								<div class="cs-rank-and-name">
-									<div class="cs-name-and-ranks">
-										<a class="cs-link min-w-0" href={steamProfileUrl}>
-											<h1 class="truncate text-3xl leading-none">{displayName}</h1>
-										</a>
-										<div class="cs-title-badges" aria-label="CS rank badges">
-											{#if currentPremier}
-												<div
-													class="cs-title-rank"
-													title={`Premier ${formatNumber(currentPremier.value)}`}
-													aria-label={`Premier rating ${formatNumber(currentPremier.value)}`}
-												>
-													<div class="cs-rating --tier-{premierTier(currentPremier.value)}" aria-hidden="true">
-														<svg viewBox="0 0 17 32" class="vertical-lines" aria-hidden="true">
-															<path
-																d="M5.44 2.13A2.6 2.6 0 0 1 7.99 0h1.86a.6.6 0 0 1 .6.7L4.83 31.5a.6.6 0 0 1-.6.5h-2.3c-1 0-1.76-.9-1.58-1.89l5.1-27.98ZM11.82.99c.1-.57.6-.99 1.18-.99h2.93a.6.6 0 0 1 .59.7l-5.4 30.31c-.1.57-.6.99-1.18.99H7a.6.6 0 0 1-.59-.7L11.82.98Z"
-															/>
-														</svg>
-														<div class="label-outer">
-															<div class="label-wrapper">
-																<span class="label-large">{currentPremierParts.large}</span>
-																{#if currentPremierParts.small}
-																	<span class="label-small">{currentPremierParts.small}</span>
-																{/if}
+									<div class="cs-name-stack">
+										<div class="cs-name-and-ranks">
+											<a class="cs-link min-w-0" href={steamProfileUrl}>
+												<h1 class="truncate text-3xl leading-none">{displayName}</h1>
+											</a>
+										</div>
+										<div class="cs-source-links">
+											{#each sourceLinks as source}
+												{@const icon = sourceIcon(source.label)}
+												<div class="cs-source-row">
+													<a
+														class="cs-source-logo {icon?.className ?? ''} {source.missing ? '--missing' : ''}"
+														href={source.href}
+														aria-label={source.missing
+															? `${source.label} account not found`
+															: `Open ${source.label}`}
+														aria-disabled={source.missing}
+														title={source.missing ? `${source.label} account not found` : source.label}
+														onclick={(event) => source.missing && event.preventDefault()}
+													>
+														{#if icon}
+															<span
+																class="cs-source-mark"
+																style={`--source-icon: url("${icon.url}")`}
+																aria-hidden="true"
+															></span>
+															{#if source.label === 'CSStats'}
+																<img
+																	class="cs-source-image"
+																	src={icon.url}
+																	alt=""
+																	aria-hidden="true"
+																	loading="lazy"
+																/>
+															{/if}
+														{:else}
+															<span class="text-xs">{source.label.slice(0, 1)}</span>
+														{/if}
+													</a>
+													{#if source.label === 'CSStats'}
+														<div class="cs-title-badges" aria-label="CS rank badges">
+															{#if currentPremier}
+																<div
+																	class="cs-title-rank"
+																	title={`${currentPremier.label} ${formatNumber(currentPremier.value)}`}
+																	aria-label={`${currentPremier.label} rating ${formatNumber(currentPremier.value)}`}
+																>
+																	<div class="cs-rating --tier-{premierTier(currentPremier.value)}" aria-hidden="true">
+																		<svg viewBox="0 0 17 32" class="vertical-lines" aria-hidden="true">
+																			<path
+																				d="M5.44 2.13A2.6 2.6 0 0 1 7.99 0h1.86a.6.6 0 0 1 .6.7L4.83 31.5a.6.6 0 0 1-.6.5h-2.3c-1 0-1.76-.9-1.58-1.89l5.1-27.98ZM11.82.99c.1-.57.6-.99 1.18-.99h2.93a.6.6 0 0 1 .59.7l-5.4 30.31c-.1.57-.6.99-1.18.99H7a.6.6 0 0 1-.59-.7L11.82.98Z"
+																			/>
+																		</svg>
+																		<div class="label-outer">
+																			<div class="label-wrapper">
+																				<span class="label-large">{currentPremierParts.large}</span>
+																				{#if currentPremierParts.small}
+																					<span class="label-small">{currentPremierParts.small}</span>
+																				{/if}
+																			</div>
+																		</div>
+																	</div>
+																</div>
+															{/if}
+															{#if highestCompetitiveRank && highestCompetitiveRankImage}
+																<a
+																	class="cs-title-rank cs-competitive-rank"
+																	href={profileStats?.profileUrl}
+																	title={`${rankName(highestCompetitiveRank.displayRank)} on ${highestCompetitiveRank.map}`}
+																	aria-label={`Highest competitive rank ${rankName(highestCompetitiveRank.displayRank)} on ${highestCompetitiveRank.map}`}
+																>
+																	<img
+																		src={highestCompetitiveRankImage}
+																		alt={rankName(highestCompetitiveRank.displayRank)}
+																		loading="lazy"
+																		referrerpolicy="no-referrer"
+																	/>
+																</a>
+															{/if}
+														</div>
+													{/if}
+													{#if source.label === 'Steam' && steamHeaderStats.length}
+														<div class="cs-source-stats" aria-label="Steam quick stats">
+															{#each steamHeaderStats as stat}
+																<span class:--inventory-high={stat.tone === 'high'} class:--inventory-low={stat.tone === 'low'}>
+																	<b>{stat.label}:</b> {stat.value}
+																</span>
+															{/each}
+														</div>
+													{/if}
+													{#if source.label === 'Leetify' && leetifyHeaderStats.length}
+														<div class="cs-source-stats" aria-label="Leetify quick stats">
+															{#each leetifyHeaderStats as [label, value]}
+																<span>
+																	{#if label === 'crosshair'}
+																		<b class="cs-crosshair-label" aria-label="Crosshair Placement"></b>
+																	{:else}
+																		<b>{label}:</b>
+																	{/if}
+																	{value ?? '-'}
+																</span>
+															{/each}
+														</div>
+													{/if}
+													{#if source.label === 'FACEIT' && source.missing}
+														<p class="cs-source-missing">FACEIT account not found</p>
+													{/if}
+													{#if source.label === 'FACEIT' && !source.missing && faceitActivityStats.length}
+														<div class="cs-faceit-status">
+															{#if faceitLevelBadge}
+																<img
+																	src={faceitLevelBadge}
+																	alt={`FACEIT level ${faceit?.skillLevel}`}
+																	loading="lazy"
+																/>
+															{/if}
+															<div class="cs-source-stats --faceit" aria-label="FACEIT status">
+																{#each faceitActivityStats as stat}
+																	{#if stat.label === 'ELO'}
+																		<span title={stat.title ?? undefined}>{stat.value}</span>
+																	{:else}
+																		<span title={stat.title ?? undefined}
+																			><b>{stat.label}:</b> {stat.value}</span
+																		>
+																	{/if}
+																{/each}
 															</div>
 														</div>
-													</div>
+													{/if}
+													{#if source.label === 'FACEIT' && !source.missing && faceitHeaderStats.length}
+														<div class="cs-faceit-badges" aria-label="FACEIT membership badges">
+															{#each faceitHeaderStats as badge}
+																<span class:--esea={badge.toLowerCase() === 'esea'}>{badge}</span>
+															{/each}
+														</div>
+													{/if}
 												</div>
-											{/if}
-											{#if highestCurrentCompetitiveRank && highestCurrentCompetitiveRankImage}
-												<a
-													class="cs-title-rank cs-competitive-rank"
-													href={profileStats?.profileUrl}
-													title={`${rankName(highestCurrentCompetitiveRank.latestRank)} on ${highestCurrentCompetitiveRank.map}`}
-													aria-label={`Highest current competitive rank ${rankName(highestCurrentCompetitiveRank.latestRank)} on ${highestCurrentCompetitiveRank.map}`}
-												>
-													<img
-														src={highestCurrentCompetitiveRankImage}
-														alt={rankName(highestCurrentCompetitiveRank.latestRank)}
-														loading="lazy"
-														referrerpolicy="no-referrer"
-													/>
-												</a>
-											{/if}
+											{/each}
 										</div>
 									</div>
 									<div class="cs-title-meta-stack">
@@ -688,69 +922,6 @@
 											{/if}
 										</div>
 									</div>
-								</div>
-								<div class="cs-source-links mt-3">
-									{#each sourceLinks as source}
-										{@const icon = sourceIcon(source.label)}
-										<div class="cs-source-row">
-											<a
-												class="cs-source-logo {icon?.className ?? ''} {source.missing ? '--missing' : ''}"
-												href={source.href}
-												aria-label={source.missing
-													? `${source.label} account not found`
-													: `Open ${source.label}`}
-												aria-disabled={source.missing}
-												title={source.missing ? `${source.label} account not found` : source.label}
-												onclick={(event) => source.missing && event.preventDefault()}
-											>
-												{#if icon}
-													<span
-														class="cs-source-mark"
-														style={`--source-icon: url("${icon.url}")`}
-														aria-hidden="true"
-													></span>
-													{#if source.label === 'CSStats'}
-														<img
-															class="cs-source-image"
-															src={icon.url}
-															alt=""
-															aria-hidden="true"
-															loading="lazy"
-														/>
-													{/if}
-												{:else}
-													<span class="text-xs">{source.label.slice(0, 1)}</span>
-												{/if}
-											</a>
-											{#if source.label === 'Leetify' && leetifyHeaderStats.length}
-												<div class="cs-source-stats" aria-label="Leetify quick stats">
-													{#each leetifyHeaderStats as [label, value]}
-														<span>
-															{#if label === 'crosshair'}
-																<b class="cs-crosshair-label" aria-label="Crosshair Placement"></b>
-															{:else}
-																<b>{label}:</b>
-															{/if}
-															{value ?? '-'}
-														</span>
-													{/each}
-												</div>
-											{/if}
-											{#if source.label === 'FACEIT' && source.missing}
-												<p class="cs-source-missing">FACEIT account not found</p>
-											{/if}
-											{#if source.label === 'FACEIT' && !source.missing && faceitHeaderStats.length}
-												<div class="cs-faceit-badges" aria-label="FACEIT membership badges">
-													{#each faceitHeaderStats as badge}
-														<span class:--esea={badge.toLowerCase() === 'esea'}>{badge}</span>
-													{/each}
-												</div>
-											{/if}
-											{#if source.label === 'FACEIT' && faceitStaleWarning}
-												<p class="cs-source-warning">{faceitStaleWarning}</p>
-											{/if}
-										</div>
-									{/each}
 								</div>
 							</div>
 						</div>
@@ -837,7 +1008,7 @@
 							</p>
 						{:else}
 							<p class="mt-4 text-sm">
-								<a class="cs-link" href="/login">Sign in with Steam</a>
+								<a class="cs-link" href={reportSignInUrl}>Sign in with Steam</a>
 								to submit a player report.
 							</p>
 						{/if}
@@ -890,6 +1061,8 @@
 						<div class="mt-4 flex flex-wrap gap-2">
 							<button class="cs-btn" type="button" disabled={isRefreshing} onclick={() => refresh('steam')}>Steam</button>
 							<button class="cs-btn" type="button" disabled={isRefreshing} onclick={() => refresh('steam_bans')}>Bans</button>
+							<button class="cs-btn" type="button" disabled={isRefreshing} onclick={() => refresh('steam_friends')}>Friends</button>
+							<button class="cs-btn" type="button" disabled={isRefreshing} onclick={() => refresh('steam_inventory')}>Inventory</button>
 							<button class="cs-btn" type="button" disabled={isRefreshing} onclick={() => refresh('csstats')}>CSStats</button>
 							<button class="cs-btn" type="button" disabled={isRefreshing} onclick={() => refresh('leetify')}>Leetify</button>
 							<button class="cs-btn" type="button" disabled={isRefreshing} onclick={() => refresh('faceit')}>FACEIT</button>

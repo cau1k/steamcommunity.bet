@@ -4,12 +4,20 @@ import type {
   FaceitProfile,
   LeetifyProfile,
   SteamBanState,
+  SteamFriendBanStats,
 } from "@steamcommunity.bet/providers";
 import { buildLeetifyProfileStats } from "@steamcommunity.bet/providers/leetify-client";
 
 export const TARGET_STEAM_ID = "76561199857251932";
 
-export type Provider = "steam" | "steam_bans" | "leetify" | "csstats" | "faceit";
+export type Provider =
+  | "steam"
+  | "steam_bans"
+  | "steam_friends"
+  | "steam_inventory"
+  | "leetify"
+  | "csstats"
+  | "faceit";
 export type Verdict = "likely_cheating" | "likely_not_cheating";
 
 export function scoreReport(
@@ -92,6 +100,20 @@ function buildSignals(
     });
   }
 
+  const steamFriends = caches.find(
+    (cache) => cache.provider === "steam_friends" && cache.fetchStatus === "success",
+  )?.rawPayload as SteamFriendBanStats | null | undefined;
+  if (steamFriends?.accessible && steamFriends.bannedFriendCount > 0) {
+    signals.push({
+      provider: "steam_friends",
+      signal: "steam_banned_friends",
+      value: `${steamFriends.bannedFriendCount}/${steamFriends.checkedFriendCount} checked Steam friend(s) have VAC or game bans`,
+      weight: Math.min(steamFriends.bannedFriendCount * 2, 10),
+      confidence: "low",
+      sourceUrl: `https://steamcommunity.com/profiles/${steamId64}/friends/`,
+    });
+  }
+
   const csstats = caches.find(
     (cache) => cache.provider === "csstats" && cache.fetchStatus === "success",
   )?.rawPayload as CSStatsPlayerProfile | null | undefined;
@@ -118,6 +140,17 @@ function buildSignals(
       weight: -10,
       confidence: "medium",
       sourceUrl: faceit.faceitUrl,
+    });
+  }
+  if (faceitInactiveOverOneYear(faceit)) {
+    const lastPlayedAt = faceit?.lastPlayedAt ?? "";
+    signals.push({
+      provider: "faceit",
+      signal: "faceit_inactive_over_one_year",
+      value: `FACEIT last played ${new Date(lastPlayedAt).toLocaleDateString()}`,
+      weight: 5,
+      confidence: "low",
+      sourceUrl: faceit?.faceitUrl ?? null,
     });
   }
   if (csstats?.premierRating && csstats.premierRating >= 24_000 && lacksFaceit) {
@@ -333,6 +366,19 @@ function largestPremierJump(ratings: CSStatsPlayerProfile["premierRatings"]) {
     }
   }
   return largest;
+}
+
+function faceitInactiveOverOneYear(faceit: FaceitProfile | null | undefined) {
+  if (!faceit?.found || !faceit.lastPlayedAt) {
+    return false;
+  }
+  const lastPlayed = new Date(faceit.lastPlayedAt);
+  if (Number.isNaN(lastPlayed.getTime())) {
+    return false;
+  }
+  const oneYearAgo = new Date();
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+  return lastPlayed <= oneYearAgo;
 }
 
 function calibrationSignal(

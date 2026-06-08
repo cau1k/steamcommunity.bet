@@ -19,6 +19,8 @@ import {
   type FaceitProfile,
   type LeetifyProfile,
   type SteamBanState,
+  type SteamFriendBanStats,
+  type SteamInventoryValue,
   type SteamPlayerSummary,
 } from "@steamcommunity.bet/providers";
 import { and, desc, eq } from "drizzle-orm";
@@ -86,7 +88,15 @@ export const reportRouter = {
     refreshProvider: publicProcedure
       .input(
         steamIdInput.extend({
-          provider: z.enum(["steam", "steam_bans", "leetify", "csstats", "faceit"]),
+          provider: z.enum([
+            "steam",
+            "steam_bans",
+            "steam_friends",
+            "steam_inventory",
+            "leetify",
+            "csstats",
+            "faceit",
+          ]),
         }),
       )
       .handler(async ({ input }) => {
@@ -177,6 +187,8 @@ async function generateReport(
   const providerResults = await Promise.allSettled([
     refreshProvider(steamId64, "steam", forceProviders),
     refreshProvider(steamId64, "steam_bans", forceProviders),
+    refreshProvider(steamId64, "steam_friends", forceProviders),
+    refreshProvider(steamId64, "steam_inventory", forceProviders),
     refreshProvider(steamId64, "leetify", forceProviders),
     refreshProvider(steamId64, "csstats", forceProviders),
     refreshProvider(steamId64, "faceit", forceProviders),
@@ -205,7 +217,17 @@ async function generateReport(
     .filter((cache) => cache.fetchStatus !== "success")
     .filter((cache) => !(leetifyCoversStats && cache.provider === "csstats"))
     .map((cache) => `${cache.provider}: ${cache.errorMessage ?? cache.fetchStatus}`);
-  const missingProviders = (["steam", "steam_bans", "leetify", "csstats", "faceit"] as const)
+  const missingProviders = (
+    [
+      "steam",
+      "steam_bans",
+      "steam_friends",
+      "steam_inventory",
+      "leetify",
+      "csstats",
+      "faceit",
+    ] as const
+  )
     .filter((provider) => !(leetifyCoversStats && provider === "csstats"))
     .filter((provider) => !caches.some((cache) => cache.provider === provider))
     .map((provider) => `${provider}: not fetched`);
@@ -393,9 +415,15 @@ async function queueRefreshIfStale(
   const providerIsStale = caches.some(
     (cache) => cache.fetchStatus !== "success" || cache.staleAt <= new Date(),
   );
-  const missingProviders = ["steam", "steam_bans", "leetify", "csstats", "faceit"].some(
-    (provider) => !caches.some((cache) => cache.provider === provider),
-  );
+  const missingProviders = [
+    "steam",
+    "steam_bans",
+    "steam_friends",
+    "steam_inventory",
+    "leetify",
+    "csstats",
+    "faceit",
+  ].some((provider) => !caches.some((cache) => cache.provider === provider));
   if (reportStaleAt > new Date() && !providerIsStale && !missingProviders) {
     return false;
   }
@@ -417,6 +445,12 @@ async function fetchProviderPayload(steamId64: string, provider: Provider) {
   }
   if (provider === "steam_bans") {
     return createSteamClient({ apiKey: env.STEAM_API_KEY }).getBanState(steamId64);
+  }
+  if (provider === "steam_friends") {
+    return createSteamClient({ apiKey: env.STEAM_API_KEY }).getFriendBanStats(steamId64);
+  }
+  if (provider === "steam_inventory") {
+    return createSteamClient({ apiKey: env.STEAM_API_KEY }).getCs2InventoryValue(steamId64);
   }
   if (provider === "leetify") {
     return createLeetifyClient({
@@ -717,6 +751,12 @@ function buildProviderDetails(caches: Array<typeof providerCache.$inferSelect>) 
   const steam = caches.find(
     (cache) => cache.provider === "steam" && cache.fetchStatus === "success",
   )?.rawPayload as SteamPlayerSummary | null | undefined;
+  const steamInventory = caches.find(
+    (cache) => cache.provider === "steam_inventory" && cache.fetchStatus === "success",
+  )?.rawPayload as SteamInventoryValue | null | undefined;
+  const steamFriends = caches.find(
+    (cache) => cache.provider === "steam_friends" && cache.fetchStatus === "success",
+  )?.rawPayload as SteamFriendBanStats | null | undefined;
   const csstats = caches.find(
     (cache) => cache.provider === "csstats" && cache.fetchStatus === "success",
   )?.rawPayload as CSStatsPlayerProfile | null | undefined;
@@ -742,12 +782,38 @@ function buildProviderDetails(caches: Array<typeof providerCache.$inferSelect>) 
           avatarUrl: steam.avatarUrl,
           profileUrl: steam.profileUrl,
           visibilityState: steam.visibilityState,
+          createdAt: steam.createdAt,
+          level: steam.level,
+          inventory: steamInventory ? steamInventoryDetails(steamInventory) : null,
+          friends: steamFriends ? steamFriendDetails(steamFriends) : null,
         }
       : null,
     csstats: csstats ? providerStats("csstats", "CSStats", csstats) : null,
     leetify: leetifyStats ? providerStats("leetify", "Leetify", leetifyStats) : null,
     faceit: faceit ? faceitDetails(faceit) : null,
     profileStats,
+  };
+}
+
+function steamInventoryDetails(inventory: SteamInventoryValue) {
+  return {
+    accessible: inventory.accessible,
+    itemCount: inventory.itemCount,
+    marketableItemCount: inventory.marketableItemCount,
+    pricedItemCount: inventory.pricedItemCount,
+    currency: inventory.currency,
+    estimatedValueCents: inventory.estimatedValueCents,
+  };
+}
+
+function steamFriendDetails(friends: SteamFriendBanStats) {
+  return {
+    accessible: friends.accessible,
+    friendCount: friends.friendCount,
+    checkedFriendCount: friends.checkedFriendCount,
+    bannedFriendCount: friends.bannedFriendCount,
+    vacBannedFriendCount: friends.vacBannedFriendCount,
+    gameBannedFriendCount: friends.gameBannedFriendCount,
   };
 }
 

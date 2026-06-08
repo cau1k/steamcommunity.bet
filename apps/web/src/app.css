@@ -1,5 +1,21 @@
 @import "tailwindcss";
 
+@theme {
+  --text-xs: calc(0.75rem + 3px);
+  --text-sm: calc(0.875rem + 3px);
+  --text-base: calc(1rem + 3px);
+  --text-lg: calc(1.125rem + 3px);
+  --text-xl: calc(1.25rem + 3px);
+  --text-2xl: calc(1.5rem + 3px);
+  --text-3xl: calc(1.875rem + 3px);
+  --text-4xl: calc(2.25rem + 3px);
+  --text-5xl: calc(3rem + 3px);
+  --text-6xl: calc(3.75rem + 3px);
+  --text-7xl: calc(4.5rem + 3px);
+  --text-8xl: calc(6rem + 3px);
+  --text-9xl: calc(8rem + 3px);
+}
+
 @font-face {
   font-family: "ArialPixel";
   src: url("/fonts/ArialPixel.ttf") format("truetype");
@@ -183,6 +199,12 @@ p {
   gap: 8px;
 }
 
+.cs-name-stack {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
 .cs-name-and-ranks {
   min-width: 0;
   flex-wrap: wrap;
@@ -296,6 +318,11 @@ p {
   max-width: 100%;
   height: 35px;
   image-rendering: auto;
+}
+
+.steam-login-button.--compact img {
+  width: 108px;
+  height: 21px;
 }
 
 .cs-btn,
@@ -426,9 +453,9 @@ p {
 .cs-source-logo {
   display: grid;
   flex: 0 0 auto;
-  width: 44px;
+  width: 32px;
   height: 32px;
-  place-items: center;
+  place-items: center start;
   color: #fff;
   text-decoration: none;
 }
@@ -438,13 +465,13 @@ p {
   min-width: 0;
   max-width: 100%;
   flex-wrap: nowrap;
-  gap: 6px 10px;
+  gap: 6px 12px;
   overflow-x: auto;
   scrollbar-width: none;
   color: var(--cs-text);
-  font-size: 14px;
-  line-height: 1.2;
-  text-shadow: 1px 1px var(--cs-black);
+  font-size: 16px;
+  line-height: 1.25;
+  text-shadow: none;
 }
 
 .cs-source-stats::-webkit-scrollbar {
@@ -454,21 +481,34 @@ p {
 .cs-source-stats span {
   flex: 0 0 auto;
   white-space: nowrap;
+  font-weight: 600;
 }
 
 .cs-source-stats b {
-  color: var(--cs-text-3);
+  color: color-mix(in srgb, var(--cs-text-3) 86%, #fff);
   font-weight: inherit;
-  text-shadow: 1px 1px var(--cs-black);
+  text-shadow: none;
+}
+
+.cs-source-stats span.--inventory-high {
+  color: var(--cs-safe);
+}
+
+.cs-source-stats span.--inventory-low {
+  color: var(--cs-accent);
+}
+
+.cs-source-stats.--faceit b {
+  color: color-mix(in srgb, #ff5500 70%, #fff);
 }
 
 .cs-crosshair-label {
   position: relative;
   display: inline-block;
-  width: 13px;
-  height: 13px;
+  width: 15px;
+  height: 15px;
   margin-right: 4px;
-  vertical-align: -2px;
+  vertical-align: -3px;
   color: #65dfff;
 }
 
@@ -477,21 +517,20 @@ p {
   position: absolute;
   content: "";
   background: currentColor;
-  box-shadow: 1px 1px 0 var(--cs-black);
 }
 
 .cs-crosshair-label::before {
-  top: 6px;
+  top: 7px;
   left: 1px;
-  width: 11px;
+  width: 13px;
   height: 1px;
 }
 
 .cs-crosshair-label::after {
   top: 1px;
-  left: 6px;
+  left: 7px;
   width: 1px;
-  height: 11px;
+  height: 13px;
 }
 
 .cs-faceit-badges {
@@ -499,6 +538,20 @@ p {
   min-width: 0;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.cs-faceit-status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.cs-faceit-status img {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  image-rendering: auto;
 }
 
 .cs-faceit-badges span {
@@ -521,16 +574,16 @@ p {
 
 .cs-source-missing {
   color: var(--cs-danger);
-  font-size: 14px;
-  line-height: 1.2;
-  text-shadow: 1px 1px var(--cs-black);
+  font-size: 16px;
+  line-height: 1.25;
+  text-shadow: none;
 }
 
 .cs-source-warning {
   color: var(--cs-accent);
-  font-size: 14px;
-  line-height: 1.2;
-  text-shadow: 1px 1px var(--cs-black);
+  font-size: 16px;
+  line-height: 1.25;
+  text-shadow: none;
 }
 
 .cs-source-logo:hover {

@@ -1,8 +1,13 @@
 <script lang="ts">
-	import { authClient } from '$lib/auth-client';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import { PUBLIC_SERVER_URL } from '$env/static/public';
+	import { authClient } from '$lib/auth-client';
 
 	const sessionQuery = authClient.useSession();
+	const steamSignInURL = $derived(
+		`${PUBLIC_SERVER_URL}/api/auth/steam?callbackURL=${encodeURIComponent(page.url.href)}`
+	);
 
 	async function handleSignOut() {
 		await authClient.signOut({
@@ -15,10 +20,6 @@
 			}
 		}
 		});
-	}
-
-	function goToLogin() {
-		goto('/login');
 	}
 
 </script>
@@ -38,9 +39,9 @@
 		</div>
 	{:else}
 		<div class="flex items-center gap-2">
-			<button onclick={goToLogin} class="cs-btn text-sm">
-				Steam Sign In
-			</button>
+			<a class="steam-login-button --compact" href={steamSignInURL} aria-label="Sign in through Steam">
+				<img src="/steam-signin.png" alt="Sign in through Steam" />
+			</a>
 		</div>
 	{/if}
 </div>

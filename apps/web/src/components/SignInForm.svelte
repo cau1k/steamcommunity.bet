@@ -5,7 +5,11 @@
 	let callbackURL = $state('/dashboard');
 	$effect(() => {
 		if (browser) {
-			callbackURL = new URL('/dashboard', window.location.origin).toString();
+			const requestedCallbackURL =
+				new URLSearchParams(window.location.search).get('callbackURL') ?? '/dashboard';
+			callbackURL = requestedCallbackURL.startsWith('/')
+				? new URL(requestedCallbackURL, window.location.origin).toString()
+				: requestedCallbackURL;
 		}
 	});
 

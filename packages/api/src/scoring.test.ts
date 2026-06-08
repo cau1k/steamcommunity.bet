@@ -131,3 +131,56 @@ test("FACEIT ESEA membership reduces cheating score", () => {
   assert.equal(report.verdict, "likely_not_cheating");
   assert.ok(report.signals.some((signal) => signal.signal === "faceit_esea_member"));
 });
+
+test("stale FACEIT activity is low-weight suspicion", () => {
+  const report = scoreReport(
+    "76561198000000002",
+    [
+      {
+        provider: "faceit",
+        fetchStatus: "success",
+        rawPayload: {
+          found: true,
+          faceitUrl: "https://www.faceit.com/en/players/stale",
+          lastPlayedAt: "2024-05-05T00:00:00.000Z",
+          hasEsea: false,
+          hasPremium: false,
+        },
+      },
+    ],
+    0,
+  );
+
+  assert.equal(report.score, 5);
+  assert.deepEqual(
+    report.signals.map((signal) => [signal.signal, signal.weight, signal.confidence]),
+    [["faceit_inactive_over_one_year", 5, "low"]],
+  );
+});
+
+test("banned Steam friends are low-confidence evidence", () => {
+  const report = scoreReport(
+    "76561198000000003",
+    [
+      {
+        provider: "steam_friends",
+        fetchStatus: "success",
+        rawPayload: {
+          accessible: true,
+          friendCount: 10,
+          checkedFriendCount: 10,
+          bannedFriendCount: 3,
+          vacBannedFriendCount: 2,
+          gameBannedFriendCount: 1,
+        },
+      },
+    ],
+    0,
+  );
+
+  assert.equal(report.score, 6);
+  assert.deepEqual(
+    report.signals.map((signal) => [signal.signal, signal.weight, signal.confidence]),
+    [["steam_banned_friends", 6, "low"]],
+  );
+});
