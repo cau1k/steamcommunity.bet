@@ -12,6 +12,7 @@
 		strongestEvidence: string[];
 		missingData: string[];
 		providerFreshness: Record<string, string>;
+		refreshedAt: string | Date;
 		sourceLinks: Array<{ label: string; href: string }>;
 		reportCount: number;
 		providerDetails?: {
@@ -105,6 +106,17 @@
 	const steam = $derived(report?.providerDetails?.steam);
 	const csstats = $derived(report?.providerDetails?.csstats);
 	const profileStats = $derived(report?.providerDetails?.profileStats ?? csstats);
+	const sourceLinks = $derived(
+		report
+			? [
+					...report.sourceLinks,
+					...(profileStats?.hasFaceit === true &&
+					!report.sourceLinks.some((source) => source.label === 'FACEIT')
+						? [{ label: 'FACEIT', href: 'https://www.faceit.com/' }]
+						: [])
+				]
+			: []
+	);
 	const displayName = $derived(steam?.name ?? resolved?.steamId64 ?? 'Unknown profile');
 	const steamProfileUrl = $derived(
 		steam?.profileUrl ??
@@ -175,6 +187,7 @@
 		rankImageUrl(highestCurrentCompetitiveRank?.latestRank)
 	);
 	const currentPremierParts = $derived(premierParts(currentPremier?.value));
+	const lastRefreshedLabel = $derived(formatLastRefreshed(report?.refreshedAt));
 
 	function refreshReport() {
 		$refreshReportMutation.mutate({ path: props.path });
@@ -206,9 +219,10 @@
 	}
 
 	function sourceIcon(label: string) {
-		if (label === 'Steam') return '/source-icons/steam.png';
-		if (label === 'CSStats') return '/source-icons/csstats.jpg';
-		if (label === 'Leetify') return '/source-icons/leetify.png';
+		if (label === 'Steam') return { className: '--steam', url: '/source-icons/steam.svg' };
+		if (label === 'CSStats') return { className: '--csstats', url: '/source-icons/csstats.svg' };
+		if (label === 'FACEIT') return { className: '--faceit', url: '/source-icons/faceit.svg' };
+		if (label === 'Leetify') return { className: '--leetify', url: '/source-icons/leetify.svg' };
 		return null;
 	}
 
@@ -246,6 +260,18 @@
 		if (value === 'missing_config') return 'Not configured';
 		const date = new Date(value);
 		if (Number.isNaN(date.getTime())) return value;
+		return date.toLocaleString(undefined, {
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		});
+	}
+
+	function formatLastRefreshed(value: string | Date | undefined) {
+		if (!value) return 'never';
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) return 'unknown';
 		return date.toLocaleString(undefined, {
 			month: 'short',
 			day: 'numeric',
@@ -300,12 +326,10 @@
 	}
 
 	function premierParts(value: number | null | undefined) {
-		const text = formatNumber(value);
-		if (!text) return { large: '', small: '' };
-		const splitAt = text.length > 4 ? text.length - 3 : text.length;
+		if (typeof value !== 'number') return { large: '', small: '' };
 		return {
-			large: text.slice(0, splitAt),
-			small: text.slice(splitAt)
+			large: `${(value / 1000).toFixed(1)}k`,
+			small: ''
 		};
 	}
 </script>
@@ -332,12 +356,17 @@
 	{:else if report && resolved}
 		<div class="cs-window">
 			<div class="cs-window-title">
-				<p>Report: {displayName}</p>
-				<p class="hidden sm:block">{resolved.steamId64}</p>
+				<p>Report for player "{displayName}" ({resolved.steamId64})</p>
+				<div class="cs-window-title-actions">
+					<button class="cs-link" type="button" disabled={isRefreshing} onclick={refreshReport}>
+						{isRefreshing ? 'Refreshing' : 'Refresh report'}
+					</button>
+					<span class="cs-title-meta">last refreshed {lastRefreshedLabel}</span>
+				</div>
 			</div>
 			<div class="cs-window-body">
 				<header class="grid gap-4">
-					<div class="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-start">
+					<div class="grid gap-4">
 						<div class="cs-profile-header">
 							<a
 								class="cs-avatar cs-profile-avatar shrink-0 overflow-hidden"
@@ -357,71 +386,85 @@
 									</div>
 								{/if}
 							</a>
-							<div class="min-w-0">
+							<div class="min-w-0 flex-1">
 								<div class="cs-rank-and-name">
 									<a class="cs-link min-w-0" href={steamProfileUrl}>
 										<h1 class="truncate text-3xl leading-none">{displayName}</h1>
 									</a>
-									<div class="cs-title-badges" aria-label="CS rank badges">
-										{#if currentPremier}
-											<div
-												class="cs-title-rank"
-												title={`Premier ${formatNumber(currentPremier.value)}`}
-												aria-label={`Premier rating ${formatNumber(currentPremier.value)}`}
-											>
-												<div class="cs-rating --tier-{premierTier(currentPremier.value)}" aria-hidden="true">
-													<svg viewBox="0 0 17 32" class="vertical-lines" aria-hidden="true">
-														<path
-															d="M5.44 2.13A2.6 2.6 0 0 1 7.99 0h1.86a.6.6 0 0 1 .6.7L4.83 31.5a.6.6 0 0 1-.6.5h-2.3c-1 0-1.76-.9-1.58-1.89l5.1-27.98ZM11.82.99c.1-.57.6-.99 1.18-.99h2.93a.6.6 0 0 1 .59.7l-5.4 30.31c-.1.57-.6.99-1.18.99H7a.6.6 0 0 1-.59-.7L11.82.98Z"
-														/>
-													</svg>
-													<div class="label-outer">
-														<div class="label-wrapper">
-															<span class="label-large">{currentPremierParts.large}</span>
-															{#if currentPremierParts.small}
-																<span class="label-small">{currentPremierParts.small}</span>
-															{/if}
+									<div class="cs-title-meta-stack">
+										<p
+											class="cs-title-verdict {report.verdict === 'likely_cheating'
+												? 'cs-verdict-danger'
+												: 'cs-verdict-safe'}"
+										>
+											{verdictLabel(report.verdict)}
+										</p>
+										<div class="cs-title-badges" aria-label="CS rank badges">
+											{#if currentPremier}
+												<div
+													class="cs-title-rank"
+													title={`Premier ${formatNumber(currentPremier.value)}`}
+													aria-label={`Premier rating ${formatNumber(currentPremier.value)}`}
+												>
+													<div class="cs-rating --tier-{premierTier(currentPremier.value)}" aria-hidden="true">
+														<svg viewBox="0 0 17 32" class="vertical-lines" aria-hidden="true">
+															<path
+																d="M5.44 2.13A2.6 2.6 0 0 1 7.99 0h1.86a.6.6 0 0 1 .6.7L4.83 31.5a.6.6 0 0 1-.6.5h-2.3c-1 0-1.76-.9-1.58-1.89l5.1-27.98ZM11.82.99c.1-.57.6-.99 1.18-.99h2.93a.6.6 0 0 1 .59.7l-5.4 30.31c-.1.57-.6.99-1.18.99H7a.6.6 0 0 1-.59-.7L11.82.98Z"
+															/>
+														</svg>
+														<div class="label-outer">
+															<div class="label-wrapper">
+																<span class="label-large">{currentPremierParts.large}</span>
+																{#if currentPremierParts.small}
+																	<span class="label-small">{currentPremierParts.small}</span>
+																{/if}
+															</div>
 														</div>
 													</div>
 												</div>
-											</div>
-										{/if}
-										{#if highestCurrentCompetitiveRank && highestCurrentCompetitiveRankImage}
-											<a
-												class="cs-title-rank cs-competitive-rank"
-												href={profileStats?.profileUrl}
-												title={`${rankName(highestCurrentCompetitiveRank.latestRank)} on ${highestCurrentCompetitiveRank.map}`}
-												aria-label={`Highest current competitive rank ${rankName(highestCurrentCompetitiveRank.latestRank)} on ${highestCurrentCompetitiveRank.map}`}
-											>
-												<img
-													src={highestCurrentCompetitiveRankImage}
-													alt={rankName(highestCurrentCompetitiveRank.latestRank)}
-													loading="lazy"
-													referrerpolicy="no-referrer"
-												/>
-											</a>
-										{/if}
+											{/if}
+											{#if highestCurrentCompetitiveRank && highestCurrentCompetitiveRankImage}
+												<a
+													class="cs-title-rank cs-competitive-rank"
+													href={profileStats?.profileUrl}
+													title={`${rankName(highestCurrentCompetitiveRank.latestRank)} on ${highestCurrentCompetitiveRank.map}`}
+													aria-label={`Highest current competitive rank ${rankName(highestCurrentCompetitiveRank.latestRank)} on ${highestCurrentCompetitiveRank.map}`}
+												>
+													<img
+														src={highestCurrentCompetitiveRankImage}
+														alt={rankName(highestCurrentCompetitiveRank.latestRank)}
+														loading="lazy"
+														referrerpolicy="no-referrer"
+													/>
+												</a>
+											{/if}
+										</div>
 									</div>
 								</div>
-								<a class="cs-link block min-w-0" href={steamProfileUrl}>
-									<p class="mt-1 truncate text-sm text-(--cs-text-3)">{steamProfileUrl}</p>
-								</a>
-								<div class="mt-3 flex flex-wrap gap-2">
-									{#each report.sourceLinks as source}
+								<div class="cs-source-links mt-3">
+									{#each sourceLinks as source}
 										{@const icon = sourceIcon(source.label)}
 										<a
-											class="cs-icon-btn"
+											class="cs-source-logo {icon?.className ?? ''}"
 											href={source.href}
 											aria-label={`Open ${source.label}`}
 											title={source.label}
 										>
 											{#if icon}
-												<img
-													class="max-h-5 max-w-5 object-contain"
-													src={icon}
-													alt=""
+												<span
+													class="cs-source-mark"
+													style={`--source-icon: url("${icon.url}")`}
 													aria-hidden="true"
-												/>
+												></span>
+												{#if source.label === 'CSStats'}
+													<img
+														class="cs-source-image"
+														src={icon.url}
+														alt=""
+														aria-hidden="true"
+														loading="lazy"
+													/>
+												{/if}
 											{:else}
 												<span class="text-xs">{source.label.slice(0, 1)}</span>
 											{/if}
@@ -430,24 +473,9 @@
 								</div>
 							</div>
 						</div>
-						<div class="cs-action-row sm:justify-end">
-							<button class="cs-btn" type="button" disabled={isRefreshing} onclick={refreshReport}>
-								{isRefreshing ? 'Refreshing' : 'Refresh report'}
-							</button>
-						</div>
 					</div>
 					<hr class="cs-hr" />
-					<div class="flex flex-wrap items-end justify-between gap-4">
-						<p class="max-w-2xl text-(--cs-text-2)">{report.explanation}</p>
-						<div
-							class="cs-verdict cs-bevel-in {report.verdict === 'likely_cheating'
-								? 'cs-verdict-danger'
-								: 'cs-verdict-safe'}"
-						>
-							<p class="cs-label">Verdict</p>
-							<p class="text-xl leading-none">{verdictLabel(report.verdict)}</p>
-						</div>
-					</div>
+					<p class="max-w-2xl text-(--cs-text-2)">{report.explanation}</p>
 				</header>
 
 				<div class="grid gap-4 md:grid-cols-[1.4fr_0.8fr]">
