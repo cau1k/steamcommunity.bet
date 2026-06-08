@@ -223,7 +223,7 @@
 					['Aim', formatDecimal(leetify.aim)],
 					['HS%', formatPercent(leetify.hsPercentage)],
 					['Time to Damage', formatMilliseconds(leetify.timeToDamage)],
-					['Crosshair Placement', formatDegrees(leetify.crosshairPlacement)]
+					['crosshair', formatDegrees(leetify.crosshairPlacement)]
 				]
 			: []
 	);
@@ -725,7 +725,14 @@
 											{#if source.label === 'Leetify' && leetifyHeaderStats.length}
 												<div class="cs-source-stats" aria-label="Leetify quick stats">
 													{#each leetifyHeaderStats as [label, value]}
-														<span><b>{label}:</b> {value ?? '-'}</span>
+														<span>
+															{#if label === 'crosshair'}
+																<b class="cs-crosshair-label" aria-label="Crosshair Placement"></b>
+															{:else}
+																<b>{label}:</b>
+															{/if}
+															{value ?? '-'}
+														</span>
 													{/each}
 												</div>
 											{/if}
