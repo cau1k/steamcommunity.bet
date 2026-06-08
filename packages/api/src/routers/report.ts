@@ -29,6 +29,13 @@ import { calibrationPayload, scoreReport, TARGET_STEAM_ID, type Provider } from 
 
 const resolveInput = z.object({ path: z.string().min(1) });
 const steamIdInput = z.object({ steamId64: z.string().regex(/^\d{17}$/) });
+const playerReportReason = z.enum([
+  "rage hacking/spinning",
+  "walling",
+  "aim hacking",
+  "radar",
+  "legit",
+]);
 const providerFlights = new Map<string, Promise<typeof providerCache.$inferInsert>>();
 
 export const reportRouter = {
@@ -82,7 +89,7 @@ export const reportRouter = {
     create: protectedProcedure
       .input(
         steamIdInput.extend({
-          reason: z.string().min(3).max(160),
+          reason: playerReportReason,
           matchUrl: z.url().optional(),
           notes: z.string().max(2_000).optional(),
         }),

@@ -88,6 +88,7 @@
 	type FaceitDetails = NonNullable<NonNullable<ProviderReport['providerDetails']>['faceit']>;
 	type ReportVote = 'up' | 'down';
 	type PlayerReportReason = 'rage hacking/spinning' | 'walling' | 'aim hacking' | 'radar';
+	type StoredPlayerReportReason = PlayerReportReason | 'legit';
 
 	const playerReportReasons: PlayerReportReason[] = [
 		'rage hacking/spinning',
@@ -253,7 +254,7 @@
 			return;
 		}
 		reportVote = vote;
-		reportReason = vote === 'up' ? 'aim hacking' : 'walling';
+		reportReason = 'aim hacking';
 	}
 
 	function closeReportModal() {
@@ -270,9 +271,10 @@
 			return;
 		}
 		const notes = reportNote.trim();
+		const reason: StoredPlayerReportReason = reportVote === 'down' ? 'legit' : reportReason;
 		$playerReportMutation.mutate({
 			steamId64: resolved.steamId64,
-			reason: reportReason,
+			reason,
 			notes: notes || undefined
 		});
 	}
@@ -818,23 +820,25 @@
 							<p class="mt-1 text-sm text-[var(--cs-text-3)]">{resolved.steamId64}</p>
 							<p class="mt-3 text-sm text-[var(--cs-text-2)]">{reportModalReason}</p>
 						</div>
-						<fieldset class="grid gap-2">
-							<legend class="cs-label">Reason</legend>
-							<div class="cs-reason-grid">
-								{#each playerReportReasons as reason}
-									<label class="cs-reason-option cs-bevel-in">
-										<input
-											class="sr-only"
-											type="radio"
-											name="player-report-reason"
-											value={reason}
-											bind:group={reportReason}
-										/>
-										<span>{reason}</span>
-									</label>
-								{/each}
-							</div>
-						</fieldset>
+						{#if reportVote === 'up'}
+							<fieldset class="grid gap-2">
+								<legend class="cs-label">Reason</legend>
+								<div class="cs-reason-grid">
+									{#each playerReportReasons as reason}
+										<label class="cs-reason-option cs-bevel-in">
+											<input
+												class="sr-only"
+												type="radio"
+												name="player-report-reason"
+												value={reason}
+												bind:group={reportReason}
+											/>
+											<span>{reason}</span>
+										</label>
+									{/each}
+								</div>
+							</fieldset>
+						{/if}
 						<label class="grid gap-2">
 							<span class="cs-label">Note</span>
 							<textarea
