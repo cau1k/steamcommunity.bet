@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { authClient } from '$lib/auth-client';
 	import { orpc } from '$lib/orpc';
 	import { createMutation, createQuery } from '@tanstack/svelte-query';
 
@@ -85,8 +86,21 @@
 
 	type SourceLink = { label: string; href: string; missing?: boolean };
 	type FaceitDetails = NonNullable<NonNullable<ProviderReport['providerDetails']>['faceit']>;
+	type ReportVote = 'up' | 'down';
+	type PlayerReportReason = 'rage hacking/spinning' | 'walling' | 'aim hacking' | 'radar';
+
+	const playerReportReasons: PlayerReportReason[] = [
+		'rage hacking/spinning',
+		'walling',
+		'aim hacking',
+		'radar'
+	];
 
 	const props: Props = $props();
+	const sessionQuery = authClient.useSession();
+	let reportVote = $state<ReportVote | null>(null);
+	let reportReason = $state<PlayerReportReason>('walling');
+	let reportNote = $state('');
 	// svelte-ignore state_referenced_locally -- SvelteKit recreates this route component per path.
 	const reportQuery = createQuery(
 		orpc.report.getOrGenerate.queryOptions({ input: { path: props.path } })
@@ -101,6 +115,16 @@
 	const refreshMutation = createMutation(
 		orpc.report.refreshProvider.mutationOptions({
 			onSuccess: () => {
+				$reportQuery.refetch();
+			}
+		})
+	);
+	const playerReportMutation = createMutation(
+		orpc.playerReport.create.mutationOptions({
+			onSuccess: () => {
+				reportVote = null;
+				reportReason = 'walling';
+				reportNote = '';
 				$reportQuery.refetch();
 			}
 		})
@@ -162,6 +186,7 @@
 	const leetifyHeaderStats = $derived(
 		leetify
 			? [
+					['Aim', formatDecimal(leetify.aim)],
 					['HS%', formatPercent(leetify.hsPercentage)],
 					['Time to Damage', formatMilliseconds(leetify.timeToDamage)],
 					['Crosshair Placement', formatDegrees(leetify.crosshairPlacement)]
@@ -207,6 +232,10 @@
 	);
 	const currentPremierParts = $derived(premierParts(currentPremier?.value));
 	const lastRefreshedLabel = $derived(formatLastRefreshed(report?.refreshedAt));
+	const reportModalTitle = $derived(reportVote ? reportVoteTitle(reportVote, report?.verdict) : '');
+	const reportModalReason = $derived(reportVote ? reportVoteReason(reportVote, report?.verdict) : '');
+	const reportVotePrimary = $derived(report?.verdict === 'likely_cheating' ? 'up' : 'down');
+	const isSubmittingReport = $derived($playerReportMutation.isPending);
 
 	function refreshReport() {
 		$refreshReportMutation.mutate({ path: props.path });
@@ -217,6 +246,35 @@
 			return;
 		}
 		$refreshMutation.mutate({ steamId64: resolved.steamId64, provider });
+	}
+
+	function openReportModal(vote: ReportVote) {
+		if (!$sessionQuery.data?.user) {
+			return;
+		}
+		reportVote = vote;
+		reportReason = vote === 'up' ? 'aim hacking' : 'walling';
+	}
+
+	function closeReportModal() {
+		if (isSubmittingReport) {
+			return;
+		}
+		reportVote = null;
+		reportReason = 'walling';
+		reportNote = '';
+	}
+
+	function submitPlayerReport() {
+		if (!resolved || !reportVote) {
+			return;
+		}
+		const notes = reportNote.trim();
+		$playerReportMutation.mutate({
+			steamId64: resolved.steamId64,
+			reason: reportReason,
+			notes: notes || undefined
+		});
 	}
 
 	function formatNumber(value: number | null | undefined) {
@@ -340,6 +398,24 @@
 
 	function verdictLabel(verdict: ProviderReport['verdict']) {
 		return verdict === 'likely_cheating' ? 'Likely cheating' : 'Likely not cheating';
+	}
+
+	function reportVoteTitle(vote: ReportVote, verdict: ProviderReport['verdict'] | undefined) {
+		if (vote === 'up') {
+			return verdict === 'likely_cheating' ? 'Confirm likely cheating' : 'Dispute not cheating';
+		}
+		return verdict === 'likely_not_cheating' ? 'Confirm likely not cheating' : 'Dispute cheating';
+	}
+
+	function reportVoteReason(vote: ReportVote, verdict: ProviderReport['verdict'] | undefined) {
+		if (vote === 'up') {
+			return verdict === 'likely_cheating'
+				? 'Reporter agrees the player is likely cheating'
+				: 'Reporter disputes the likely not cheating verdict';
+		}
+		return verdict === 'likely_not_cheating'
+			? 'Reporter agrees the player is likely not cheating'
+			: 'Reporter disputes the likely cheating verdict';
 	}
 
 	function rankName(rank: number | null | undefined) {
@@ -570,6 +646,33 @@
 						<h2 class="cs-label">Reports</h2>
 						<p class="mt-3 text-5xl leading-none text-[var(--cs-accent)]">{report.reportCount}</p>
 						<p class="mt-2 text-sm text-[var(--cs-text-3)]">active signed-in player reports</p>
+						{#if $sessionQuery.data?.user}
+							<div class="mt-4 flex flex-wrap gap-2">
+								<button
+									class="cs-btn cs-vote-btn {reportVotePrimary === 'up' ? '--primary' : ''}"
+									type="button"
+									disabled={isSubmittingReport}
+									aria-label="Thumbs up report"
+									onclick={() => openReportModal('up')}
+								>
+									<span aria-hidden="true">+</span>
+								</button>
+								<button
+									class="cs-btn cs-vote-btn {reportVotePrimary === 'down' ? '--primary' : ''}"
+									type="button"
+									disabled={isSubmittingReport}
+									aria-label="Thumbs down report"
+									onclick={() => openReportModal('down')}
+								>
+									<span aria-hidden="true">-</span>
+								</button>
+							</div>
+						{:else}
+							<p class="mt-4 text-sm">
+								<a class="cs-link" href="/login">Sign in with Steam</a>
+								to submit a player report.
+							</p>
+						{/if}
 					</section>
 				</div>
 
@@ -685,5 +788,76 @@
 				{/if}
 			</div>
 		</div>
+		{#if reportVote}
+			<div class="cs-modal-backdrop" role="presentation" onclick={closeReportModal}>
+				<div
+					class="cs-window cs-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="player-report-title"
+					tabindex="-1"
+					onclick={(event) => event.stopPropagation()}
+					onkeydown={(event) => event.key === 'Escape' && closeReportModal()}
+				>
+					<div class="cs-window-title">
+						<p id="player-report-title">{reportModalTitle}</p>
+						<button
+							class="cs-window-close"
+							type="button"
+							aria-label="Close report dialog"
+							disabled={isSubmittingReport}
+							onclick={closeReportModal}
+						>
+							x
+						</button>
+					</div>
+					<form class="cs-window-body" onsubmit={(event) => (event.preventDefault(), submitPlayerReport())}>
+						<div class="cs-panel">
+							<p class="cs-label">Player report</p>
+							<p class="mt-2 text-xl leading-none">{displayName}</p>
+							<p class="mt-1 text-sm text-[var(--cs-text-3)]">{resolved.steamId64}</p>
+							<p class="mt-3 text-sm text-[var(--cs-text-2)]">{reportModalReason}</p>
+						</div>
+						<fieldset class="grid gap-2">
+							<legend class="cs-label">Reason</legend>
+							<div class="cs-reason-grid">
+								{#each playerReportReasons as reason}
+									<label class="cs-reason-option cs-bevel-in">
+										<input
+											class="sr-only"
+											type="radio"
+											name="player-report-reason"
+											value={reason}
+											bind:group={reportReason}
+										/>
+										<span>{reason}</span>
+									</label>
+								{/each}
+							</div>
+						</fieldset>
+						<label class="grid gap-2">
+							<span class="cs-label">Note</span>
+							<textarea
+								class="cs-input min-h-28 resize-y"
+								maxlength="2000"
+								bind:value={reportNote}
+								placeholder="Optional"
+							></textarea>
+						</label>
+						{#if $playerReportMutation.error}
+							<p class="text-sm text-[var(--cs-danger)]">{$playerReportMutation.error.message}</p>
+						{/if}
+						<div class="flex flex-wrap justify-end gap-2">
+							<button class="cs-btn" type="button" disabled={isSubmittingReport} onclick={closeReportModal}>
+								Cancel
+							</button>
+							<button class="cs-btn" type="submit" disabled={isSubmittingReport}>
+								{isSubmittingReport ? 'Submitting' : 'Submit report'}
+							</button>
+						</div>
+					</form>
+				</div>
+			</div>
+		{/if}
 	{/if}
 </section>

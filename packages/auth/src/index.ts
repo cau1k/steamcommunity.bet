@@ -3,13 +3,21 @@ import * as schema from "@steamcommunity.bet/db/schema/auth";
 import { env } from "@steamcommunity.bet/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { oAuthProxy } from "better-auth/plugins";
 import { steamOpenId } from "./steam-plugin";
+
+const localTrustedOrigins = ["http://localhost:5173", "http://127.0.0.1:5173"];
+const productionAuthURL = "https://api.steamcommunity.bet";
 
 export function createAuth() {
   const db = createDb();
-  const trustedOrigins = env.CORS_ORIGIN.split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  const trustedOrigins = Array.from(
+    new Set(
+      [...env.CORS_ORIGIN.split(","), ...localTrustedOrigins]
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    ),
+  );
 
   return betterAuth({
     database: drizzleAdapter(db, {
@@ -21,7 +29,15 @@ export function createAuth() {
     emailAndPassword: {
       enabled: false,
     },
-    plugins: [steamOpenId()],
+    plugins: [
+      steamOpenId(),
+      // Better Auth OAuth proxy for local/preview OAuth providers.
+      // @see https://better-auth.com/docs/plugins/oauth-proxy
+      oAuthProxy({
+        productionURL: productionAuthURL,
+        secret: env.OAUTH_PROXY_SECRET || env.BETTER_AUTH_SECRET,
+      }),
+    ],
     // uncomment cookieCache setting when ready to deploy to Cloudflare using *.workers.dev domains
     // session: {
     //   cookieCache: {

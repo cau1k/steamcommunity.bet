@@ -17,6 +17,7 @@ import {
   type CSStatsPlayerProfile,
   type FaceitProfile,
   type LeetifyProfile,
+  type SteamBanState,
   type SteamPlayerSummary,
 } from "@steamcommunity.bet/providers";
 import { and, desc, eq } from "drizzle-orm";
@@ -112,6 +113,10 @@ export const reportRouter = {
 
     listForSteamId: publicProcedure.input(steamIdInput).handler(async ({ input }) => {
       return listPlayerReports(input.steamId64);
+    }),
+
+    listMine: protectedProcedure.handler(async ({ context }) => {
+      return listReporterReports(context.session.user.id);
     }),
   },
 };
@@ -374,23 +379,37 @@ async function fetchProviderPayload(steamId64: string, provider: Provider) {
 
 async function ensureSteamProfile(steamId64: string, summary: SteamPlayerSummary | null) {
   const db = createDb();
+  if (!summary) {
+    await db
+      .insert(steamProfile)
+      .values({
+        steamId: steamId64,
+        personaName: null,
+        avatarUrl: null,
+        profileUrl: `https://steamcommunity.com/profiles/${steamId64}`,
+        visibilityState: null,
+        lastSeenAt: new Date(),
+      })
+      .onConflictDoNothing({ target: steamProfile.steamId });
+    return;
+  }
   await db
     .insert(steamProfile)
     .values({
       steamId: steamId64,
-      personaName: summary?.personaName ?? null,
-      avatarUrl: summary?.avatarUrl ?? null,
-      profileUrl: summary?.profileUrl ?? `https://steamcommunity.com/profiles/${steamId64}`,
-      visibilityState: summary?.visibilityState ?? null,
+      personaName: summary.personaName,
+      avatarUrl: summary.avatarUrl,
+      profileUrl: summary.profileUrl ?? `https://steamcommunity.com/profiles/${steamId64}`,
+      visibilityState: summary.visibilityState,
       lastSeenAt: new Date(),
     })
     .onConflictDoUpdate({
       target: steamProfile.steamId,
       set: {
-        personaName: summary?.personaName ?? null,
-        avatarUrl: summary?.avatarUrl ?? null,
-        profileUrl: summary?.profileUrl ?? `https://steamcommunity.com/profiles/${steamId64}`,
-        visibilityState: summary?.visibilityState ?? null,
+        personaName: summary.personaName,
+        avatarUrl: summary.avatarUrl,
+        profileUrl: summary.profileUrl ?? `https://steamcommunity.com/profiles/${steamId64}`,
+        visibilityState: summary.visibilityState,
         lastSeenAt: new Date(),
       },
     });
@@ -441,6 +460,74 @@ async function listPlayerReports(steamId64: string) {
     .where(and(eq(playerReport.steamId, steamId64), eq(playerReport.status, "active")))
     .orderBy(desc(playerReport.createdAt));
   return { count: rows.length, reports: rows };
+}
+
+async function listReporterReports(reporterUserId: string) {
+  const db = createDb();
+  const rows = await db
+    .select()
+    .from(playerReport)
+    .where(and(eq(playerReport.reporterUserId, reporterUserId), eq(playerReport.status, "active")))
+    .orderBy(desc(playerReport.createdAt));
+  const reports = await Promise.all(
+    rows.map(async (row) => {
+      await Promise.all([
+        refreshProvider(row.steamId, "steam", false),
+        refreshProvider(row.steamId, "steam_bans", false),
+      ]);
+      const [profile, latestReport, banCache] = await Promise.all([
+        db.select().from(steamProfile).where(eq(steamProfile.steamId, row.steamId)).get(),
+        db
+          .select()
+          .from(generatedReport)
+          .where(eq(generatedReport.steamId, row.steamId))
+          .orderBy(desc(generatedReport.refreshedAt))
+          .get(),
+        db
+          .select()
+          .from(providerCache)
+          .where(
+            and(
+              eq(providerCache.provider, "steam_bans"),
+              eq(providerCache.cacheKey, `steam_bans:${row.steamId}`),
+            ),
+          )
+          .get(),
+      ]);
+      const ban = banSummary(banCache?.rawPayload as SteamBanState | null | undefined);
+      return {
+        id: row.id,
+        steamId: row.steamId,
+        playerName: profile?.personaName ?? row.steamId,
+        profileUrl: profile?.profileUrl ?? `https://steamcommunity.com/profiles/${row.steamId}`,
+        reason: row.reason,
+        notes: row.notes,
+        createdAt: row.createdAt,
+        reportVerdict: latestReport?.verdict ?? null,
+        reportUrl: latestReport?.sourcePath ?? `/profiles/${row.steamId}`,
+        ban,
+      };
+    }),
+  );
+  return { reports };
+}
+
+function banSummary(ban: SteamBanState | null | undefined) {
+  const types = [
+    ...(ban?.vacBanned ? ["VAC ban"] : []),
+    ...(ban?.gameBanCount
+      ? [`${ban.gameBanCount} game ban${ban.gameBanCount === 1 ? "" : "s"}`]
+      : []),
+    ...(ban?.communityBanned ? ["Community ban"] : []),
+  ];
+  return {
+    status: types.length ? ("banned" as const) : ("not_banned" as const),
+    types,
+    vacBanned: Boolean(ban?.vacBanned),
+    gameBanCount: ban?.gameBanCount ?? 0,
+    communityBanned: Boolean(ban?.communityBanned),
+    daysSinceLastBan: ban?.daysSinceLastBan ?? null,
+  };
 }
 
 function tryParseUrl(value: string) {

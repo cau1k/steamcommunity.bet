@@ -305,6 +305,77 @@ p {
   text-shadow: 1px 1px var(--cs-light);
 }
 
+.cs-vote-btn {
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  justify-content: center;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.cs-vote-btn.--primary {
+  color: #fff;
+}
+
+.cs-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.cs-modal {
+  width: min(100%, 520px);
+  max-height: min(720px, calc(100vh - 36px));
+  overflow: auto;
+}
+
+.cs-window-close {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid;
+  border-color: var(--cs-light) var(--cs-dark) var(--cs-dark) var(--cs-light);
+  background: var(--cs-bg);
+  color: var(--cs-text);
+  cursor: pointer;
+  line-height: 1;
+  text-shadow: 1px 1px var(--cs-black);
+}
+
+.cs-window-close:disabled {
+  color: var(--cs-text-3);
+  cursor: wait;
+}
+
+.cs-reason-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cs-reason-option {
+  display: grid;
+  min-height: 34px;
+  place-items: center;
+  background: var(--cs-bg-2);
+  color: var(--cs-text-2);
+  cursor: pointer;
+  padding: 7px 8px;
+  text-align: center;
+  text-shadow: 1px 1px var(--cs-black);
+}
+
+.cs-reason-option:has(input:checked) {
+  background: var(--cs-accent-2);
+  color: #fff;
+}
+
 .cs-source-links {
   display: grid;
   width: min(100%, 420px);
@@ -331,17 +402,30 @@ p {
 .cs-source-stats {
   display: flex;
   min-width: 0;
-  flex-wrap: wrap;
+  max-width: 100%;
+  flex-wrap: nowrap;
   gap: 6px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
   color: var(--cs-text);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.2;
   text-shadow: 1px 1px var(--cs-black);
 }
 
+.cs-source-stats::-webkit-scrollbar {
+  display: none;
+}
+
+.cs-source-stats span {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .cs-source-stats b {
-  color: var(--cs-text-2);
+  color: var(--cs-text-3);
   font-weight: inherit;
+  text-shadow: 1px 1px var(--cs-black);
 }
 
 .cs-source-logo:hover {

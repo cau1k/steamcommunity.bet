@@ -94,6 +94,7 @@ test("parses full Leetify public profile stats", async () => {
   assert.equal(profile.rating, 8.17);
   assert.equal(stats?.name, "Piewhat");
   assert.equal(stats?.hasFaceit, true);
+  assert.equal(stats?.aim, 69.4);
   assert.equal(stats?.hsPercentage, 18);
   assert.equal(stats?.timeToDamage, 590);
   assert.equal(stats?.crosshairPlacement, 10.52);

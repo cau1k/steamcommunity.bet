@@ -42,6 +42,7 @@ export const server = await Worker("server", {
     CORS_ORIGIN: `${alchemy.env.CORS_ORIGIN!},${deployedWebOrigin},${apexOrigin},${apiOrigin}`,
     BETTER_AUTH_SECRET: alchemy.secret.env.BETTER_AUTH_SECRET!,
     BETTER_AUTH_URL: apiOrigin,
+    OAUTH_PROXY_SECRET: process.env.OAUTH_PROXY_SECRET ?? process.env.BETTER_AUTH_SECRET ?? "",
     STEAM_API_KEY: alchemy.secret.env.STEAM_API_KEY!,
     FACEIT_API_KEY: alchemy.secret.env.FACEIT_API_KEY!,
     FACEIT_BASE_URL: process.env.FACEIT_BASE_URL ?? "https://open.faceit.com/data/v4",
