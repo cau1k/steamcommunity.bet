@@ -29,3 +29,13 @@ test("non-target profile stays likely_not_cheating without signals", () => {
   );
   assert.equal(report.signals.length, 0);
 });
+
+test("signed-in report weighting only represents cheating accusations", () => {
+  const report = scoreReport("76561198000000000", [], 1);
+
+  assert.equal(report.score, 2);
+  assert.deepEqual(
+    report.signals.map((signal) => [signal.signal, signal.value, signal.weight]),
+    [["signed_in_accusations", "1 active signed-in cheating accusation(s)", 2]],
+  );
+});

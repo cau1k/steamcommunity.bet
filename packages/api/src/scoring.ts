@@ -16,9 +16,9 @@ export type Verdict = "likely_cheating" | "likely_not_cheating";
 export function scoreReport(
   steamId64: string,
   caches: Array<typeof providerCache.$inferSelect>,
-  reportCount: number,
+  accusationReportCount: number,
 ) {
-  const signals = buildSignals(steamId64, caches, reportCount);
+  const signals = buildSignals(steamId64, caches, accusationReportCount);
   const score = signals.reduce((total, signal) => total + signal.weight, 0);
   const verdict: Verdict = score >= 50 ? "likely_cheating" : "likely_not_cheating";
   return {
@@ -120,7 +120,7 @@ type Signal = {
 function buildSignals(
   steamId64: string,
   caches: Array<typeof providerCache.$inferSelect>,
-  reportCount: number,
+  accusationReportCount: number,
 ): Signal[] {
   const signals: Signal[] = [];
   if (steamId64 === TARGET_STEAM_ID) {
@@ -286,12 +286,12 @@ function buildSignals(
     }
   }
 
-  if (reportCount > 0) {
+  if (accusationReportCount > 0) {
     signals.push({
       provider: "calibration",
-      signal: "signed_in_reports",
-      value: `${reportCount} active signed-in report(s)`,
-      weight: Math.min(reportCount * 2, 10),
+      signal: "signed_in_accusations",
+      value: `${accusationReportCount} active signed-in cheating accusation(s)`,
+      weight: Math.min(accusationReportCount * 2, 10),
       confidence: "low",
       sourceUrl: null,
     });

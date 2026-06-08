@@ -7,6 +7,10 @@
 	const sessionQuery = authClient.useSession();
 	const playerReportsQuery = createQuery(orpc.playerReport.listMine.queryOptions());
 
+	function reportReasonLabel(reason: string) {
+		return reason === 'legit' ? 'not cheating / legit' : reason;
+	}
+
 	$effect(() => {
 		if (!$sessionQuery.isPending && !$sessionQuery.data) {
 			goto('/login');
@@ -71,7 +75,7 @@
 												<a class="cs-link" href={report.reportUrl}>{report.playerName}</a>
 												<p class="text-xs text-[var(--cs-text-3)]">{report.steamId}</p>
 											</td>
-											<td>{report.reason}</td>
+											<td>{reportReasonLabel(report.reason)}</td>
 											<td>
 												<span
 													class="cs-indicator cs-bevel-in {report.ban.status === 'banned'

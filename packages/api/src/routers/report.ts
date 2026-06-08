@@ -168,7 +168,7 @@ async function generateReport(steamId64: string, sourcePath: string, forceProvid
   const db = createDb();
   const caches = await db.select().from(providerCache).where(eq(providerCache.steamId, steamId64));
   const reports = await listPlayerReports(steamId64);
-  const scored = scoreReport(steamId64, caches, reports.count);
+  const scored = scoreReport(steamId64, caches, reports.accusationCount);
   const providerDetails = buildProviderDetails(caches);
   const steamDetails = providerDetails.steam;
   const leetifyCoversStats = !providerDetails.csstats && providerDetails.leetify;
@@ -246,12 +246,16 @@ async function generateReport(steamId64: string, sourcePath: string, forceProvid
       missingData: [...missingData, ...missingProviders],
       providerFreshness: freshness,
       sourceLinks,
-      reportCount: reports.count,
+      reportCount: reports.accusationCount,
       generatedAt: now,
       refreshedAt: now,
     })
     .returning();
-  return attachProviderDetails(inserted[0] ?? (await getLatestReport(steamId64)), providerDetails);
+  return attachProviderDetails(
+    inserted[0] ?? (await getLatestReport(steamId64)),
+    providerDetails,
+    reports,
+  );
 }
 
 async function refreshProvider(steamId64: string, provider: Provider, force: boolean) {
@@ -435,7 +439,7 @@ async function upsertProviderCache(row: typeof providerCache.$inferInsert) {
 
 async function getLatestReport(steamId64: string) {
   const db = createDb();
-  const [report, caches] = await Promise.all([
+  const [report, caches, reports] = await Promise.all([
     db
       .select()
       .from(generatedReport)
@@ -443,6 +447,7 @@ async function getLatestReport(steamId64: string) {
       .orderBy(desc(generatedReport.refreshedAt))
       .get(),
     db.select().from(providerCache).where(eq(providerCache.steamId, steamId64)),
+    listPlayerReports(steamId64),
   ]);
   if (!report) {
     return undefined;
@@ -454,8 +459,10 @@ async function getLatestReport(steamId64: string) {
       ...report,
       verdict,
       explanation: normalizeReportExplanation(report.explanation, verdict),
+      reportCount: reports.accusationCount,
     },
     buildProviderDetails(caches),
+    reports,
   );
 }
 
@@ -466,7 +473,14 @@ async function listPlayerReports(steamId64: string) {
     .from(playerReport)
     .where(and(eq(playerReport.steamId, steamId64), eq(playerReport.status, "active")))
     .orderBy(desc(playerReport.createdAt));
-  return { count: rows.length, reports: rows };
+  const accusationCount = rows.filter((row) => row.reason !== "legit").length;
+  const legitCount = rows.filter((row) => row.reason === "legit").length;
+  return {
+    count: rows.length,
+    accusationCount,
+    legitCount,
+    reports: rows,
+  };
 }
 
 async function listReporterReports(reporterUserId: string) {
@@ -668,11 +682,20 @@ function providerStats(
   };
 }
 
-function attachProviderDetails<T>(
+function attachProviderDetails<T extends { reportCount?: number } | undefined>(
   report: T,
   providerDetails: ReturnType<typeof buildProviderDetails>,
+  reportCounts?: Awaited<ReturnType<typeof listPlayerReports>>,
 ) {
-  return report ? { ...report, providerDetails } : report;
+  return report
+    ? {
+        ...report,
+        providerDetails,
+        accusationReportCount:
+          reportCounts?.accusationCount ?? ("reportCount" in report ? report.reportCount : 0),
+        legitReportCount: reportCounts?.legitCount ?? 0,
+      }
+    : report;
 }
 
 function stableHash(value: unknown) {

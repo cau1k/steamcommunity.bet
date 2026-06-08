@@ -16,6 +16,8 @@
 		refreshedAt: string | Date;
 		sourceLinks: Array<{ label: string; href: string }>;
 		reportCount: number;
+		accusationReportCount: number;
+		legitReportCount: number;
 		providerDetails?: {
 			steam?: {
 				name: string | null;
@@ -646,8 +648,22 @@
 
 					<section class="cs-panel">
 						<h2 class="cs-label">Reports</h2>
-						<p class="mt-3 text-5xl leading-none text-[var(--cs-accent)]">{report.reportCount}</p>
-						<p class="mt-2 text-sm text-[var(--cs-text-3)]">active signed-in player reports</p>
+						<div class="mt-3 grid gap-3">
+							<div class="flex items-baseline gap-3">
+								<p class="text-5xl leading-none text-[var(--cs-accent)]">
+									{report.accusationReportCount ?? report.reportCount}
+								</p>
+								<p class="text-md text-[var(--cs-text-3)]">
+									cheating accusation(s)
+								</p>
+							</div>
+							<div class="flex items-baseline gap-3">
+								<p class="text-3xl leading-none text-[var(--cs-text)]">{report.legitReportCount ?? 0}</p>
+								<p class="text-md text-[var(--cs-text-3)]">
+									cheating dispute(s)
+								</p>
+							</div>
+						</div>
 						{#if $sessionQuery.data?.user}
 							<div class="mt-4 flex flex-wrap gap-2">
 								<button
