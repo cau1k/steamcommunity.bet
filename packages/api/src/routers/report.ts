@@ -11,9 +11,11 @@ import { env } from "@steamcommunity.bet/env/server";
 import {
   buildLeetifyProfileStats,
   createCSStatsClient,
+  createFaceitClient,
   createLeetifyClient,
   createSteamClient,
   type CSStatsPlayerProfile,
+  type FaceitProfile,
   type LeetifyProfile,
   type SteamPlayerSummary,
 } from "@steamcommunity.bet/providers";
@@ -64,7 +66,9 @@ export const reportRouter = {
 
     refreshProvider: publicProcedure
       .input(
-        steamIdInput.extend({ provider: z.enum(["steam", "steam_bans", "leetify", "csstats"]) }),
+        steamIdInput.extend({
+          provider: z.enum(["steam", "steam_bans", "leetify", "csstats", "faceit"]),
+        }),
       )
       .handler(async ({ input }) => {
         await refreshProvider(input.steamId64, input.provider, true);
@@ -141,6 +145,7 @@ async function generateReport(steamId64: string, sourcePath: string, forceProvid
     refreshProvider(steamId64, "steam_bans", forceProviders),
     refreshProvider(steamId64, "leetify", forceProviders),
     refreshProvider(steamId64, "csstats", forceProviders),
+    refreshProvider(steamId64, "faceit", forceProviders),
   ]);
   for (const result of providerResults) {
     if (result.status === "rejected") {
@@ -166,7 +171,7 @@ async function generateReport(steamId64: string, sourcePath: string, forceProvid
     .filter((cache) => cache.fetchStatus !== "success")
     .filter((cache) => !(leetifyCoversStats && cache.provider === "csstats"))
     .map((cache) => `${cache.provider}: ${cache.errorMessage ?? cache.fetchStatus}`);
-  const missingProviders = (["steam", "steam_bans", "leetify", "csstats"] as const)
+  const missingProviders = (["steam", "steam_bans", "leetify", "csstats", "faceit"] as const)
     .filter((provider) => !(leetifyCoversStats && provider === "csstats"))
     .filter((provider) => !caches.some((cache) => cache.provider === provider))
     .map((provider) => `${provider}: not fetched`);
@@ -181,6 +186,7 @@ async function generateReport(steamId64: string, sourcePath: string, forceProvid
     },
     { label: "CSStats", href: `https://csgostats.gg/player/${steamId64}` },
     { label: "Leetify", href: `https://leetify.com/app/profile/${steamId64}` },
+    { label: "FACEIT", href: providerDetails.faceit?.faceitUrl ?? "https://www.faceit.com/" },
   ];
 
   await db.delete(cheatSignal).where(eq(cheatSignal.steamId, steamId64));
@@ -317,7 +323,7 @@ async function queueRefreshIfStale(
   const providerIsStale = caches.some(
     (cache) => cache.fetchStatus !== "success" || cache.staleAt <= new Date(),
   );
-  const missingProviders = ["steam", "steam_bans", "leetify", "csstats"].some(
+  const missingProviders = ["steam", "steam_bans", "leetify", "csstats", "faceit"].some(
     (provider) => !caches.some((cache) => cache.provider === provider),
   );
   if (reportStaleAt > new Date() && !providerIsStale && !missingProviders) {
@@ -351,6 +357,13 @@ async function fetchProviderPayload(steamId64: string, provider: Provider) {
       baseUrl: env.LEETIFY_BASE_URL,
       timeoutMs: Number(env.LEETIFY_TIMEOUT_MS ?? 10_000),
     }).getProfile(steamId64);
+  }
+  if (provider === "faceit") {
+    return createFaceitClient({
+      apiKey: env.FACEIT_API_KEY,
+      baseUrl: env.FACEIT_BASE_URL,
+      timeoutMs: Number(env.FACEIT_TIMEOUT_MS ?? 10_000),
+    }).getProfileBySteamId(steamId64);
   }
   return createCSStatsClient({
     baseUrl: env.CSSTATS_BASE_URL,
@@ -480,6 +493,9 @@ function buildProviderDetails(caches: Array<typeof providerCache.$inferSelect>) 
   const leetify = caches.find(
     (cache) => cache.provider === "leetify" && cache.fetchStatus === "success",
   )?.rawPayload as LeetifyProfile | null | undefined;
+  const faceit = caches.find(
+    (cache) => cache.provider === "faceit" && cache.fetchStatus === "success",
+  )?.rawPayload as FaceitProfile | null | undefined;
   const leetifyStats = buildLeetifyProfileStats(
     csstats?.steamId64 ?? leetify?.steam64Id ?? "",
     leetify,
@@ -500,7 +516,20 @@ function buildProviderDetails(caches: Array<typeof providerCache.$inferSelect>) 
       : null,
     csstats: csstats ? providerStats("csstats", "CSStats", csstats) : null,
     leetify: leetifyStats ? providerStats("leetify", "Leetify", leetifyStats) : null,
+    faceit: faceit ? faceitDetails(faceit) : null,
     profileStats,
+  };
+}
+
+function faceitDetails(profile: FaceitProfile) {
+  return {
+    found: profile.found,
+    nickname: profile.nickname,
+    avatarUrl: profile.avatarUrl,
+    country: profile.country,
+    faceitUrl: profile.faceitUrl,
+    skillLevel: profile.skillLevel,
+    elo: profile.elo,
   };
 }
 
@@ -540,6 +569,8 @@ function providerStats(
     opening: "opening" in stats ? stats.opening : null,
     tLeetify: "tLeetify" in stats ? stats.tLeetify : null,
     ctLeetify: "ctLeetify" in stats ? stats.ctLeetify : null,
+    timeToDamage: "timeToDamage" in stats ? stats.timeToDamage : null,
+    crosshairPlacement: "crosshairPlacement" in stats ? stats.crosshairPlacement : null,
   };
 }
 

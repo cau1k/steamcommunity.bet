@@ -26,10 +26,12 @@ const leetifyProfileSchema = z
         utility: z.number().nullable().optional(),
         gamesPlayed: z.number().nullable().optional(),
         clutch: z.number().nullable().optional(),
+        crosshairPlacement: z.number().nullable().optional(),
         ctLeetify: z.number().nullable().optional(),
         leetify: z.number().nullable().optional(),
         opening: z.number().nullable().optional(),
         tLeetify: z.number().nullable().optional(),
+        timeToDamage: z.number().nullable().optional(),
       })
       .passthrough()
       .optional(),
@@ -47,6 +49,8 @@ const leetifyProfileSchema = z
             kills: z.number().nullable().optional(),
             deaths: z.number().nullable().optional(),
             accuracyHead: z.number().nullable().optional(),
+            preaim: z.number().nullable().optional(),
+            reactionTime: z.number().nullable().optional(),
           })
           .passthrough(),
       )
@@ -103,6 +107,8 @@ export type LeetifyProfileStats = {
   opening: number | null;
   tLeetify: number | null;
   ctLeetify: number | null;
+  timeToDamage: number | null;
+  crosshairPlacement: number | null;
 };
 
 export function createLeetifyClient(config: LeetifyClientConfig = {}) {
@@ -202,6 +208,16 @@ export function buildLeetifyProfileStats(
       .map((game) => game.accuracyHead)
       .filter((value): value is number => typeof value === "number"),
   );
+  const reactionTime = average(
+    recentGames
+      .map((game) => game.reactionTime)
+      .filter((value): value is number => typeof value === "number"),
+  );
+  const preaim = average(
+    recentGames
+      .map((game) => game.preaim)
+      .filter((value): value is number => typeof value === "number"),
+  );
   const currentPremier = premierGames[0]?.skillLevel ?? null;
   const bestPremier = maxNullable(premierGames.map((game) => game.skillLevel ?? null));
   return {
@@ -241,6 +257,8 @@ export function buildLeetifyProfileStats(
     opening: leetifyScore(profile.recentGameRatings?.opening),
     tLeetify: leetifyScore(profile.recentGameRatings?.tLeetify),
     ctLeetify: leetifyScore(profile.recentGameRatings?.ctLeetify),
+    timeToDamage: leetifyMilliseconds(profile.recentGameRatings?.timeToDamage ?? reactionTime),
+    crosshairPlacement: rounded(profile.recentGameRatings?.crosshairPlacement ?? preaim),
   };
 }
 
@@ -256,6 +274,13 @@ function leetifyPercent(value: number | null | undefined) {
     return null;
   }
   return Math.round((Math.abs(value) <= 1 ? value * 100 : value) * 100) / 100;
+}
+
+function leetifyMilliseconds(value: number | null | undefined) {
+  if (typeof value !== "number") {
+    return null;
+  }
+  return Math.round(Math.abs(value) < 10 ? value * 1000 : value);
 }
 
 function rounded(value: number | null | undefined) {

@@ -25,6 +25,15 @@
 			csstats?: ProfileStats | null;
 			leetify?: ProfileStats | null;
 			profileStats?: ProfileStats | null;
+			faceit?: {
+				found: boolean;
+				nickname: string | null;
+				avatarUrl: string | null;
+				country: string | null;
+				faceitUrl: string | null;
+				skillLevel: number | null;
+				elo: number | null;
+			} | null;
 		};
 	};
 
@@ -70,7 +79,12 @@
 		opening?: number | null;
 		tLeetify?: number | null;
 		ctLeetify?: number | null;
+		timeToDamage?: number | null;
+		crosshairPlacement?: number | null;
 	};
+
+	type SourceLink = { label: string; href: string; missing?: boolean };
+	type FaceitDetails = NonNullable<NonNullable<ProviderReport['providerDetails']>['faceit']>;
 
 	const props: Props = $props();
 	// svelte-ignore state_referenced_locally -- SvelteKit recreates this route component per path.
@@ -105,17 +119,11 @@
 	const isRefreshing = $derived($refreshReportMutation.isPending || $refreshMutation.isPending);
 	const steam = $derived(report?.providerDetails?.steam);
 	const csstats = $derived(report?.providerDetails?.csstats);
+	const faceit = $derived(report?.providerDetails?.faceit);
+	const leetify = $derived(report?.providerDetails?.leetify);
 	const profileStats = $derived(report?.providerDetails?.profileStats ?? csstats);
 	const sourceLinks = $derived(
-		report
-			? [
-					...report.sourceLinks,
-					...(profileStats?.hasFaceit === true &&
-					!report.sourceLinks.some((source) => source.label === 'FACEIT')
-						? [{ label: 'FACEIT', href: 'https://www.faceit.com/' }]
-						: [])
-				]
-			: []
+		report ? withFaceitSource(report.sourceLinks, faceit, profileStats?.hasFaceit) : []
 	);
 	const displayName = $derived(steam?.name ?? resolved?.steamId64 ?? 'Unknown profile');
 	const steamProfileUrl = $derived(
@@ -144,8 +152,19 @@
 					['Opening', formatDecimal(profileStats.opening)],
 					['T rating', formatDecimal(profileStats.tLeetify)],
 					['CT rating', formatDecimal(profileStats.ctLeetify)],
+					['Time to Damage', formatMilliseconds(profileStats.timeToDamage)],
+					['Crosshair Placement', formatDegrees(profileStats.crosshairPlacement)],
 					['Recent', profileStats.recentResults?.join(' ') || null],
 					['Most played', profileStats.mostPlayedMap]
+				]
+			: []
+	);
+	const leetifyHeaderStats = $derived(
+		leetify
+			? [
+					['HS%', formatPercent(leetify.hsPercentage)],
+					['Time to Damage', formatMilliseconds(leetify.timeToDamage)],
+					['Crosshair Placement', formatDegrees(leetify.crosshairPlacement)]
 				]
 			: []
 	);
@@ -193,7 +212,7 @@
 		$refreshReportMutation.mutate({ path: props.path });
 	}
 
-	function refresh(provider: 'steam' | 'steam_bans' | 'leetify' | 'csstats') {
+	function refresh(provider: 'steam' | 'steam_bans' | 'leetify' | 'csstats' | 'faceit') {
 		if (!resolved) {
 			return;
 		}
@@ -212,6 +231,14 @@
 		return typeof value === 'number' ? `${value}%` : null;
 	}
 
+	function formatDegrees(value: number | null | undefined) {
+		return typeof value === 'number' ? `${formatDecimal(value)}°` : null;
+	}
+
+	function formatMilliseconds(value: number | null | undefined) {
+		return typeof value === 'number' ? `${formatNumber(value)}ms` : null;
+	}
+
 	function formatBoolean(value: boolean | null | undefined) {
 		if (value === true) return 'yes';
 		if (value === false) return 'no';
@@ -226,11 +253,42 @@
 		return null;
 	}
 
+	function withFaceitSource(
+		links: Array<{ label: string; href: string }>,
+		faceitProfile: FaceitDetails | null | undefined,
+		hasFaceit: boolean | null | undefined
+	): SourceLink[] {
+		const next = links.map((source) =>
+			source.label === 'FACEIT'
+				? {
+						...source,
+						href: faceitProfile?.faceitUrl ?? source.href,
+						missing: faceitProfile?.found === false
+					}
+				: source
+		);
+		if (next.some((source) => source.label === 'FACEIT')) {
+			return next;
+		}
+		if (faceitProfile || hasFaceit === true) {
+			return [
+				...next,
+				{
+					label: 'FACEIT',
+					href: faceitProfile?.faceitUrl ?? 'https://www.faceit.com/',
+					missing: faceitProfile?.found === false
+				}
+			];
+		}
+		return next;
+	}
+
 	function providerLabel(provider: string) {
 		if (provider === 'steam') return 'Steam';
 		if (provider === 'steam_bans') return 'Steam bans';
 		if (provider === 'csstats') return 'CSStats';
 		if (provider === 'leetify') return 'Leetify';
+		if (provider === 'faceit') return 'FACEIT';
 		return provider.replaceAll('_', ' ');
 	}
 
@@ -444,31 +502,44 @@
 								<div class="cs-source-links mt-3">
 									{#each sourceLinks as source}
 										{@const icon = sourceIcon(source.label)}
-										<a
-											class="cs-source-logo {icon?.className ?? ''}"
-											href={source.href}
-											aria-label={`Open ${source.label}`}
-											title={source.label}
-										>
-											{#if icon}
-												<span
-													class="cs-source-mark"
-													style={`--source-icon: url("${icon.url}")`}
-													aria-hidden="true"
-												></span>
-												{#if source.label === 'CSStats'}
-													<img
-														class="cs-source-image"
-														src={icon.url}
-														alt=""
+										<div class="cs-source-row">
+											<a
+												class="cs-source-logo {icon?.className ?? ''} {source.missing ? '--missing' : ''}"
+												href={source.href}
+												aria-label={source.missing
+													? `${source.label} account not found`
+													: `Open ${source.label}`}
+												aria-disabled={source.missing}
+												title={source.missing ? `${source.label} account not found` : source.label}
+												onclick={(event) => source.missing && event.preventDefault()}
+											>
+												{#if icon}
+													<span
+														class="cs-source-mark"
+														style={`--source-icon: url("${icon.url}")`}
 														aria-hidden="true"
-														loading="lazy"
-													/>
+													></span>
+													{#if source.label === 'CSStats'}
+														<img
+															class="cs-source-image"
+															src={icon.url}
+															alt=""
+															aria-hidden="true"
+															loading="lazy"
+														/>
+													{/if}
+												{:else}
+													<span class="text-xs">{source.label.slice(0, 1)}</span>
 												{/if}
-											{:else}
-												<span class="text-xs">{source.label.slice(0, 1)}</span>
+											</a>
+											{#if source.label === 'Leetify' && leetifyHeaderStats.length}
+												<div class="cs-source-stats" aria-label="Leetify quick stats">
+													{#each leetifyHeaderStats as [label, value]}
+														<span><b>{label}:</b> {value ?? '-'}</span>
+													{/each}
+												</div>
 											{/if}
-										</a>
+										</div>
 									{/each}
 								</div>
 							</div>
@@ -550,6 +621,7 @@
 							<button class="cs-btn" type="button" disabled={isRefreshing} onclick={() => refresh('steam_bans')}>Bans</button>
 							<button class="cs-btn" type="button" disabled={isRefreshing} onclick={() => refresh('csstats')}>CSStats</button>
 							<button class="cs-btn" type="button" disabled={isRefreshing} onclick={() => refresh('leetify')}>Leetify</button>
+							<button class="cs-btn" type="button" disabled={isRefreshing} onclick={() => refresh('faceit')}>FACEIT</button>
 						</div>
 					</section>
 				</div>

@@ -1,6 +1,7 @@
 import type { providerCache } from "@steamcommunity.bet/db/schema/report";
 import type {
   CSStatsPlayerProfile,
+  FaceitProfile,
   LeetifyProfile,
   SteamBanState,
   SteamPlayerSummary,
@@ -9,7 +10,7 @@ import { buildLeetifyProfileStats } from "@steamcommunity.bet/providers/leetify-
 
 export const TARGET_STEAM_ID = "76561199857251932";
 
-export type Provider = "steam" | "steam_bans" | "leetify" | "csstats";
+export type Provider = "steam" | "steam_bans" | "leetify" | "csstats" | "faceit";
 export type Verdict = "likely_cheating" | "likely_not_cheating";
 
 export function scoreReport(
@@ -58,6 +59,21 @@ export function calibrationPayload(provider: Provider) {
       isLeetifyUser: false,
       rating: 6.2,
     } satisfies LeetifyProfile;
+  }
+  if (provider === "faceit") {
+    return {
+      steamId64: TARGET_STEAM_ID,
+      found: false,
+      playerId: null,
+      nickname: null,
+      avatarUrl: null,
+      country: null,
+      faceitUrl: null,
+      skillLevel: null,
+      elo: null,
+      gamePlayerId: null,
+      gamePlayerName: null,
+    } satisfies FaceitProfile;
   }
   return {
     steamId64: TARGET_STEAM_ID,
@@ -155,7 +171,13 @@ function buildSignals(
   const csstats = caches.find(
     (cache) => cache.provider === "csstats" && cache.fetchStatus === "success",
   )?.rawPayload as CSStatsPlayerProfile | null | undefined;
-  if (csstats?.premierRating && csstats.premierRating >= 24_000 && csstats.hasFaceit === false) {
+  const faceit = caches.find(
+    (cache) => cache.provider === "faceit" && cache.fetchStatus === "success",
+  )?.rawPayload as FaceitProfile | null | undefined;
+  const hasFaceit = faceit?.found === true;
+  const lacksFaceit =
+    faceit?.found === false || (faceit === undefined && csstats?.hasFaceit === false);
+  if (csstats?.premierRating && csstats.premierRating >= 24_000 && lacksFaceit) {
     signals.push({
       provider: "csstats",
       signal: "elite_premier_no_faceit",
@@ -224,7 +246,8 @@ function buildSignals(
     !csstats &&
     leetifyStats?.premierRating &&
     leetifyStats.premierRating >= 24_000 &&
-    leetifyStats.hasFaceit === false
+    !hasFaceit &&
+    (faceit?.found === false || leetifyStats.hasFaceit === false)
   ) {
     signals.push({
       provider: "leetify",

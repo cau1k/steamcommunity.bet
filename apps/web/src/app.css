@@ -307,12 +307,20 @@ p {
 
 .cs-source-links {
   display: grid;
-  width: max-content;
+  width: min(100%, 420px);
+  gap: 8px;
+}
+
+.cs-source-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
   gap: 8px;
 }
 
 .cs-source-logo {
   display: grid;
+  flex: 0 0 auto;
   width: 44px;
   height: 32px;
   place-items: center;
@@ -320,8 +328,35 @@ p {
   text-decoration: none;
 }
 
+.cs-source-stats {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  color: var(--cs-text);
+  font-size: 13px;
+  line-height: 1.2;
+  text-shadow: 1px 1px var(--cs-black);
+}
+
+.cs-source-stats b {
+  color: var(--cs-text-2);
+  font-weight: inherit;
+}
+
 .cs-source-logo:hover {
   filter: brightness(1.08);
+}
+
+.cs-source-logo.--missing {
+  cursor: help;
+  opacity: 0.34;
+}
+
+.cs-source-logo.--missing:hover {
+  color: #fff;
+  filter: none;
+  opacity: 0.46;
 }
 
 .cs-source-logo.--faceit:hover {
@@ -334,6 +369,10 @@ p {
 
 .cs-source-logo.--leetify:hover {
   color: #ff6b9d;
+}
+
+.cs-source-logo.--faceit.--missing:hover {
+  color: #fff;
 }
 
 .cs-source-logo.--csstats {

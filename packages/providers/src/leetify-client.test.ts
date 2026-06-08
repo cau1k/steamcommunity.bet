@@ -52,6 +52,8 @@ test("parses full Leetify public profile stats", async () => {
             kills: 30,
             deaths: 14,
             accuracyHead: 0.1132,
+            preaim: 11.223,
+            reactionTime: 0.6563,
           },
           {
             gameFinishedAt: "2026-06-07T03:14:34.000Z",
@@ -64,6 +66,8 @@ test("parses full Leetify public profile stats", async () => {
             kills: 22,
             deaths: 15,
             accuracyHead: 0.2192,
+            preaim: 10.834,
+            reactionTime: 0.6012,
           },
           {
             gameFinishedAt: "2026-01-17T21:24:41.000Z",
@@ -76,6 +80,8 @@ test("parses full Leetify public profile stats", async () => {
             kills: 20,
             deaths: 10,
             accuracyHead: 0.2,
+            preaim: 9.494,
+            reactionTime: 0.5121,
           },
         ],
       });
@@ -88,6 +94,9 @@ test("parses full Leetify public profile stats", async () => {
   assert.equal(profile.rating, 8.17);
   assert.equal(stats?.name, "Piewhat");
   assert.equal(stats?.hasFaceit, true);
+  assert.equal(stats?.hsPercentage, 18);
+  assert.equal(stats?.timeToDamage, 590);
+  assert.equal(stats?.crosshairPlacement, 10.52);
   assert.equal(stats?.premierRating, 23695);
   assert.equal(stats?.bestPremierRating, 23695);
   assert.equal(stats?.competitiveRanks[0]?.map, "Cache");
