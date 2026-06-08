@@ -13,11 +13,19 @@ config({ path: "../../apps/web/.env" });
 config({ path: "../../apps/server/.env" });
 
 const app = await alchemy("steamcommunity.bet");
+const isDev = process.argv.includes("--dev");
+if (isDev) {
+  process.env.STEAMCOMMUNITY_BET_WEB_DEV = "1";
+}
 const dbMigrationsDir = fileURLToPath(new URL("../../packages/db/src/migrations", import.meta.url));
 const deployedWebOrigin = "https://steamcommunity-bet-web-user.caulk.workers.dev";
 const apexOrigin = "https://steamcommunity.bet";
 const apiOrigin = "https://api.steamcommunity.bet";
 const zoneId = "6d49123f74e53ae15f6a3e983239c0f6";
+
+if (isDev) {
+  process.env.PUBLIC_SERVER_URL = apiOrigin;
+}
 
 const db = await D1Database("database", {
   migrationsDir: dbMigrationsDir,
@@ -46,7 +54,7 @@ export const server = await Worker("server", {
     REPORT_STALE_HOURS: process.env.REPORT_STALE_HOURS ?? "12",
   },
   dev: {
-    port: 3000,
+    url: apiOrigin,
   },
 });
 
@@ -84,12 +92,14 @@ export const webRoute = await Route("apex-web-route", {
   zoneId,
   pattern: "steamcommunity.bet/*",
   script: web,
+  dev: isDev,
 });
 
 export const apiRoute = await Route("api-web-route", {
   zoneId,
   pattern: "api.steamcommunity.bet/*",
   script: server,
+  dev: isDev,
 });
 
 console.log(`Web    -> ${web.url}`);

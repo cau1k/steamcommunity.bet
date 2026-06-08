@@ -7,7 +7,8 @@ import alchemy from "alchemy/cloudflare/sveltekit";
 const alchemyConfigPath = fileURLToPath(
   new URL("./.alchemy/local/wrangler.jsonc", import.meta.url),
 );
-const shouldUseAlchemy = existsSync(alchemyConfigPath);
+const shouldUseAlchemy =
+  existsSync(alchemyConfigPath) && process.env.STEAMCOMMUNITY_BET_WEB_DEV !== "1";
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {

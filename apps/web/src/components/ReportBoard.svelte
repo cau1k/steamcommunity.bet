@@ -326,7 +326,7 @@
 				<p>Report unavailable</p>
 			</div>
 			<div class="cs-window-body">
-				<p class="text-[var(--cs-danger)]">{$reportQuery.error?.message ?? 'Unknown oRPC error'}</p>
+				<p class="text-(--cs-danger)">{$reportQuery.error?.message ?? 'Unknown oRPC error'}</p>
 			</div>
 		</div>
 	{:else if report && resolved}
@@ -352,7 +352,7 @@
 										referrerpolicy="no-referrer"
 									/>
 								{:else}
-									<div class="grid size-full place-items-center text-xl text-[var(--cs-text-3)]">
+									<div class="grid size-full place-items-center text-xl text-(--cs-text-3)">
 										{displayName.slice(0, 1).toUpperCase()}
 									</div>
 								{/if}
@@ -404,7 +404,7 @@
 									</div>
 								</div>
 								<a class="cs-link block min-w-0" href={steamProfileUrl}>
-									<p class="mt-1 truncate text-sm text-[var(--cs-text-3)]">{steamProfileUrl}</p>
+									<p class="mt-1 truncate text-sm text-(--cs-text-3)">{steamProfileUrl}</p>
 								</a>
 								<div class="mt-3 flex flex-wrap gap-2">
 									{#each report.sourceLinks as source}
@@ -438,7 +438,7 @@
 					</div>
 					<hr class="cs-hr" />
 					<div class="flex flex-wrap items-end justify-between gap-4">
-						<p class="max-w-2xl text-[var(--cs-text-2)]">{report.explanation}</p>
+						<p class="max-w-2xl text-(--cs-text-2)">{report.explanation}</p>
 						<div
 							class="cs-verdict cs-bevel-in {report.verdict === 'likely_cheating'
 								? 'cs-verdict-danger'
@@ -456,14 +456,14 @@
 						{#if evidenceRows.length}
 							<ul class="mt-3 grid gap-2">
 								{#each evidenceRows as evidence}
-									<li class="cs-panel-inset cs-bevel-in cs-evidence-row text-[var(--cs-text-2)]">
-										<span class="cs-chip w-fit text-[var(--cs-accent)]">{evidence.label}</span>
+									<li class="cs-panel-inset cs-bevel-in cs-evidence-row text-(--cs-text-2)">
+										<span class="cs-chip w-fit text-(--cs-accent)">{evidence.label}</span>
 										<span>{evidence.value}</span>
 									</li>
 								{/each}
 							</ul>
 						{:else}
-							<p class="mt-3 text-sm text-[var(--cs-text-3)]">No risk signals above threshold.</p>
+							<p class="mt-3 text-sm text-(--cs-text-3)">No risk signals above threshold.</p>
 						{/if}
 					</section>
 
