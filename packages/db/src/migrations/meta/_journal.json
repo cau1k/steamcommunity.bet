@@ -8,6 +8,13 @@
       "when": 1780873973897,
       "tag": "0000_crazy_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1780943689191,
+      "tag": "0001_loose_chamber",
+      "breakpoints": true
     }
   ]
 }

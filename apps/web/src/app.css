@@ -607,6 +607,25 @@ p {
   text-align: left;
 }
 
+.cs-table-sort {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  text-shadow: 1px 1px var(--cs-black);
+}
+
+.cs-table-sort:hover {
+  color: var(--cs-accent);
+}
+
+.cs-table-sort span {
+  color: var(--cs-text-3);
+  font-size: 11px;
+}
+
 .cs-chip,
 .cs-indicator {
   display: inline-flex;

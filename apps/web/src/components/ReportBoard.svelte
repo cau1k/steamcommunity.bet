@@ -39,6 +39,7 @@
 			notes: string | null;
 			createdAt: string | Date;
 		} | null;
+		viewerOwnsPlayer: boolean;
 		providerDetails?: {
 			steam?: {
 				name: string | null;
@@ -174,6 +175,7 @@
 	const profileStats = $derived(report?.providerDetails?.profileStats ?? csstats);
 	const faceitStaleWarning = $derived(faceitActivityWarning(faceit));
 	const viewerHasPlayerReport = $derived(Boolean(report?.viewerPlayerReport));
+	const viewerOwnsPlayer = $derived(Boolean(report?.viewerOwnsPlayer));
 	const sourceLinks = $derived(
 		report ? withFaceitSource(report.sourceLinks, faceit, profileStats?.hasFaceit) : []
 	);
@@ -283,7 +285,7 @@
 	}
 
 	function openReportModal(vote: ReportVote) {
-		if (!$sessionQuery.data?.user) {
+		if (!$sessionQuery.data?.user || viewerHasPlayerReport || viewerOwnsPlayer) {
 			return;
 		}
 		reportVote = vote;
@@ -641,28 +643,30 @@
 													{verdictLabel(report.verdict)}
 												</p>
 											</div>
-											<div class="cs-verdict-actions">
-												<button
-													class="cs-icon-btn cs-verdict-action --danger"
-													type="button"
-													disabled={isSubmittingReport}
-													aria-label="Accuse of cheating"
-													title="Accuse of cheating"
-													onclick={() => openReportModal('up')}
-												>
-													<ThumbsUpSharpIcon height="1em" />
-												</button>
-												<button
-													class="cs-icon-btn cs-verdict-action --safe"
-													type="button"
-													disabled={isSubmittingReport}
-													aria-label="Dispute cheating"
-													title="Dispute cheating"
-													onclick={() => openReportModal('down')}
-												>
-													<ThumbsDownSharpIcon height="1em" />
-												</button>
-											</div>
+											{#if $sessionQuery.data?.user && !viewerHasPlayerReport && !viewerOwnsPlayer}
+												<div class="cs-verdict-actions">
+													<button
+														class="cs-icon-btn cs-verdict-action --danger"
+														type="button"
+														disabled={isSubmittingReport}
+														aria-label="Accuse of cheating"
+														title="Accuse of cheating"
+														onclick={() => openReportModal('up')}
+													>
+														<ThumbsUpSharpIcon height="1em" />
+													</button>
+													<button
+														class="cs-icon-btn cs-verdict-action --safe"
+														type="button"
+														disabled={isSubmittingReport}
+														aria-label="Dispute cheating"
+														title="Dispute cheating"
+														onclick={() => openReportModal('down')}
+													>
+														<ThumbsDownSharpIcon height="1em" />
+													</button>
+												</div>
+											{/if}
 										</div>
 									</div>
 								</div>
@@ -771,7 +775,7 @@
 								{/each}
 							</div>
 						{/if}
-						{#if $sessionQuery.data?.user && !viewerHasPlayerReport}
+						{#if $sessionQuery.data?.user && !viewerHasPlayerReport && !viewerOwnsPlayer}
 							<div class="mt-4 flex flex-wrap gap-2">
 								<button
 									class="cs-btn --danger"
@@ -790,6 +794,10 @@
 									Dispute cheating
 								</button>
 							</div>
+						{:else if $sessionQuery.data?.user && viewerOwnsPlayer}
+							<p class="mt-4 text-sm text-[var(--cs-text-3)]">
+								You cannot report your own account.
+							</p>
 						{:else if $sessionQuery.data?.user && viewerHasPlayerReport}
 							<p class="mt-4 text-sm text-[var(--cs-text-3)]">
 								Your report is already recorded.

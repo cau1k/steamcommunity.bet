@@ -9,6 +9,7 @@ const OPENID_NS = "http://specs.openid.net/auth/2.0";
 const OPENID_IDENTIFIER_SELECT = `${OPENID_NS}/identifier_select`;
 const STEAM_CLAIMED_ID_RE = /^https?:\/\/steamcommunity\.com\/openid\/id\/(?<steamId64>\d{17})$/;
 const STATE_TTL_MS = 10 * 60 * 1000;
+const ADMIN_STEAM_ID = "76561199570438277";
 
 type SteamProfile = {
   steamId64: string;
@@ -277,6 +278,11 @@ export function steamOpenId(): BetterAuthPlugin {
             user = await ctx.context.internalAdapter.updateUser(user.id, {
               image: profile.avatarUrl ?? user.image,
               name: profile.personaName ?? user.name,
+            });
+          }
+          if (steamId64 === ADMIN_STEAM_ID) {
+            user = await ctx.context.internalAdapter.updateUser(user.id, {
+              role: "admin",
             });
           }
 

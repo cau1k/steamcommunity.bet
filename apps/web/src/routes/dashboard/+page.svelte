@@ -6,6 +6,7 @@
 
 	const sessionQuery = authClient.useSession();
 	const playerReportsQuery = createQuery(orpc.playerReport.listMine.queryOptions());
+	const adminCheckQuery = createQuery(orpc.admin.check.queryOptions());
 
 	function reportReasonLabel(reason: string) {
 		return reason === 'legit' ? 'not cheating / legit' : reason;
@@ -41,6 +42,9 @@
 				<section class="cs-panel">
 					<h1 class="text-3xl leading-none">Dashboard</h1>
 					<p class="mt-3">Welcome {$sessionQuery.data.user.name}</p>
+					{#if $adminCheckQuery.data?.isAdmin}
+						<a class="cs-btn mt-4 inline-flex w-fit items-center" href="/admin">Admin</a>
+					{/if}
 				</section>
 				<section class="cs-panel">
 					<div class="flex flex-wrap items-center justify-between gap-3">

@@ -3,7 +3,7 @@ import * as schema from "@steamcommunity.bet/db/schema/auth";
 import { env } from "@steamcommunity.bet/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { oAuthProxy } from "better-auth/plugins";
+import { admin, oAuthProxy } from "better-auth/plugins";
 import { steamOpenId } from "./steam-plugin";
 
 const localTrustedOrigins = ["http://localhost:5173", "http://127.0.0.1:5173"];
@@ -31,6 +31,7 @@ export function createAuth() {
     },
     plugins: [
       steamOpenId(),
+      admin(),
       // Better Auth OAuth proxy for local/preview OAuth providers.
       // @see https://better-auth.com/docs/plugins/oauth-proxy
       oAuthProxy({

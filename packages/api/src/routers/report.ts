@@ -1,5 +1,5 @@
 import { createDb } from "@steamcommunity.bet/db";
-import { user } from "@steamcommunity.bet/db/schema/auth";
+import { account, user } from "@steamcommunity.bet/db/schema/auth";
 import {
   cheatSignal,
   generatedReport,
@@ -107,6 +107,12 @@ export const reportRouter = {
       )
       .handler(async ({ context, input }) => {
         const db = createDb();
+        const reporterSteamId = await steamIdForUser(context.session.user.id);
+        if (reporterSteamId === input.steamId64) {
+          throw new ORPCError("FORBIDDEN", {
+            message: "You cannot report your own Steam account",
+          });
+        }
         await ensureSteamProfile(input.steamId64, null);
         await db
           .insert(playerReport)
@@ -302,6 +308,7 @@ async function refreshProviderUncached(steamId64: string, provider: Provider, fo
   const now = new Date();
   try {
     const payload = await fetchProviderPayload(steamId64, provider);
+    const cachePayload = cacheableProviderPayload(provider, payload);
     await ensureSteamProfile(
       steamId64,
       provider === "steam" ? (payload as SteamPlayerSummary | null) : null,
@@ -310,8 +317,8 @@ async function refreshProviderUncached(steamId64: string, provider: Provider, fo
       provider,
       cacheKey,
       steamId: steamId64,
-      payloadHash: stableHash(payload),
-      rawPayload: payload,
+      payloadHash: stableHash(cachePayload),
+      rawPayload: cachePayload,
       fetchStatus: "success" as const,
       errorMessage: null,
       fetchedAt: now,
@@ -339,6 +346,37 @@ async function refreshProviderUncached(steamId64: string, provider: Provider, fo
     await upsertProviderCache(row);
     return row;
   }
+}
+
+function cacheableProviderPayload(provider: Provider, payload: unknown) {
+  if (provider === "csstats" && isRecord(payload)) {
+    return {
+      ...payload,
+      rawHtml: null,
+      rawStatsHtml: null,
+    };
+  }
+  if (provider === "leetify" && isRecord(payload)) {
+    return {
+      ...payload,
+      games: Array.isArray(payload.games) ? recentLeetifyGames(payload.games) : payload.games,
+    };
+  }
+  return payload;
+}
+
+function recentLeetifyGames(games: unknown[]) {
+  return [...games]
+    .sort((left, right) => {
+      const leftTime = isRecord(left) ? Date.parse(String(left.gameFinishedAt ?? "")) : 0;
+      const rightTime = isRecord(right) ? Date.parse(String(right.gameFinishedAt ?? "")) : 0;
+      return rightTime - leftTime;
+    })
+    .slice(0, 120);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 async function queueRefreshIfStale(
@@ -506,21 +544,24 @@ function hasFakeCalibrationSteamCache(
 
 async function listPlayerReports(steamId64: string, viewerUserId?: string) {
   const db = createDb();
-  const rows = await db
-    .select({
-      id: playerReport.id,
-      reporterUserId: playerReport.reporterUserId,
-      steamId: playerReport.steamId,
-      reason: playerReport.reason,
-      notes: playerReport.notes,
-      status: playerReport.status,
-      createdAt: playerReport.createdAt,
-      reporterName: user.name,
-    })
-    .from(playerReport)
-    .leftJoin(user, eq(playerReport.reporterUserId, user.id))
-    .where(and(eq(playerReport.steamId, steamId64), eq(playerReport.status, "active")))
-    .orderBy(desc(playerReport.createdAt));
+  const [rows, viewerSteamId] = await Promise.all([
+    db
+      .select({
+        id: playerReport.id,
+        reporterUserId: playerReport.reporterUserId,
+        steamId: playerReport.steamId,
+        reason: playerReport.reason,
+        notes: playerReport.notes,
+        status: playerReport.status,
+        createdAt: playerReport.createdAt,
+        reporterName: user.name,
+      })
+      .from(playerReport)
+      .leftJoin(user, eq(playerReport.reporterUserId, user.id))
+      .where(and(eq(playerReport.steamId, steamId64), eq(playerReport.status, "active")))
+      .orderBy(desc(playerReport.createdAt)),
+    viewerUserId ? steamIdForUser(viewerUserId) : Promise.resolve(null),
+  ]);
   const accusationCount = rows.filter((row) => row.reason !== "legit").length;
   const legitCount = rows.filter((row) => row.reason === "legit").length;
   const recentCheatingReports = rows
@@ -540,6 +581,7 @@ async function listPlayerReports(steamId64: string, viewerUserId?: string) {
     count: rows.length,
     accusationCount,
     legitCount,
+    viewerOwnsPlayer: viewerSteamId === steamId64,
     recentCheatingReports,
     viewerReport: viewerReport
       ? {
@@ -551,6 +593,16 @@ async function listPlayerReports(steamId64: string, viewerUserId?: string) {
       : null,
     reports: rows,
   };
+}
+
+async function steamIdForUser(userId: string) {
+  const db = createDb();
+  const row = await db
+    .select({ steamId: account.accountId })
+    .from(account)
+    .where(and(eq(account.userId, userId), eq(account.providerId, "steam")))
+    .get();
+  return row?.steamId ?? null;
 }
 
 async function listReporterReports(reporterUserId: string) {
@@ -767,6 +819,7 @@ function attachProviderDetails<T extends { reportCount?: number } | undefined>(
         strongestEvidenceDetails: strongestEvidenceDetails ?? [],
         recentCheatingReports: reportCounts?.recentCheatingReports ?? [],
         viewerPlayerReport: reportCounts?.viewerReport ?? null,
+        viewerOwnsPlayer: reportCounts?.viewerOwnsPlayer ?? false,
         accusationReportCount:
           reportCounts?.accusationCount ?? ("reportCount" in report ? report.reportCount : 0),
         legitReportCount: reportCounts?.legitCount ?? 0,
