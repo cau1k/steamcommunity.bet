@@ -237,10 +237,6 @@
 	const lastRefreshedLabel = $derived(formatLastRefreshed(report?.refreshedAt));
 	const reportModalTitle = $derived(reportVote ? reportVoteTitle(reportVote, report?.verdict) : '');
 	const reportModalReason = $derived(reportVote ? reportVoteReason(reportVote, report?.verdict) : '');
-	const reportAction = $derived(report?.verdict === 'likely_cheating' ? 'down' : 'up');
-	const reportActionLabel = $derived(
-		report?.verdict === 'likely_cheating' ? 'Dispute cheating' : 'Accuse of cheating'
-	);
 	const isSubmittingReport = $derived($playerReportMutation.isPending);
 
 	function refreshReport() {
@@ -673,12 +669,20 @@
 						{#if $sessionQuery.data?.user}
 							<div class="mt-4 flex flex-wrap gap-2">
 								<button
-									class="cs-btn"
+									class="cs-btn --danger"
 									type="button"
 									disabled={isSubmittingReport}
-									onclick={() => openReportModal(reportAction)}
+									onclick={() => openReportModal('up')}
 								>
-									{reportActionLabel}
+									Accuse of cheating
+								</button>
+								<button
+									class="cs-btn --safe"
+									type="button"
+									disabled={isSubmittingReport}
+									onclick={() => openReportModal('down')}
+								>
+									Dispute cheating
 								</button>
 							</div>
 						{:else}

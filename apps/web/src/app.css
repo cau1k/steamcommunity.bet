@@ -293,6 +293,14 @@ p {
   color: var(--cs-accent);
 }
 
+.cs-btn.--danger {
+  color: var(--cs-danger);
+}
+
+.cs-btn.--safe {
+  color: var(--cs-safe);
+}
+
 .cs-btn:active,
 .cs-icon-btn:active {
   border-color: var(--cs-dark) var(--cs-light) var(--cs-light) var(--cs-dark);
