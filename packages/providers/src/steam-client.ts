@@ -292,16 +292,22 @@ export function createSteamClient(config: SteamClientConfig) {
         itemAmounts.set(marketName, (itemAmounts.get(marketName) ?? 0) + Number(asset.amount ?? 1));
       }
 
-      let estimatedValueCents = 0;
-      let pricedItemCount = 0;
-      for (const [marketName, amount] of [...itemAmounts.entries()].slice(0, 80)) {
-        const price = await getMarketPriceCents(marketName);
-        if (price === null) {
-          continue;
-        }
-        pricedItemCount += amount;
-        estimatedValueCents += price * amount;
-      }
+      const pricedItems = await mapConcurrent(
+        [...itemAmounts.entries()].slice(0, 80),
+        8,
+        async ([marketName, amount]) => ({
+          amount,
+          price: await getMarketPriceCents(marketName),
+        }),
+      );
+      const estimatedValueCents = pricedItems.reduce(
+        (total, item) => total + (item.price === null ? 0 : item.price * item.amount),
+        0,
+      );
+      const pricedItemCount = pricedItems.reduce(
+        (total, item) => total + (item.price === null ? 0 : item.amount),
+        0,
+      );
 
       return {
         steamId64,
@@ -372,6 +378,18 @@ function chunks<T>(values: T[], size: number) {
     result.push(values.slice(index, index + size));
   }
   return result;
+}
+
+async function mapConcurrent<T, R>(
+  values: T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<R>,
+) {
+  const results: R[] = [];
+  for (const chunk of chunks(values, concurrency)) {
+    results.push(...(await Promise.all(chunk.map(mapper))));
+  }
+  return results;
 }
 
 function priceTextToCents(value: string | null) {

@@ -43,6 +43,47 @@ test("fetches CS2 inventory with Steam's accepted page size", async () => {
   assert.equal(inventory.estimatedValueCents, 123);
 });
 
+test("prices CS2 inventory market names with bounded concurrency", async () => {
+  const steamId64 = "76561199570438277";
+  let activePriceRequests = 0;
+  let maxActivePriceRequests = 0;
+  const client = createSteamClient({
+    fetch: async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === `/inventory/${steamId64}/730/2`) {
+        return Response.json({
+          total_inventory_count: 9,
+          assets: Array.from({ length: 9 }, (_, index) => ({
+            classid: String(index),
+            instanceid: "0",
+            amount: "1",
+          })),
+          descriptions: Array.from({ length: 9 }, (_, index) => ({
+            classid: String(index),
+            instanceid: "0",
+            market_hash_name: `Item ${index}`,
+            marketable: 1,
+          })),
+        });
+      }
+      if (url.pathname === "/market/priceoverview/") {
+        activePriceRequests += 1;
+        maxActivePriceRequests = Math.max(maxActivePriceRequests, activePriceRequests);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        activePriceRequests -= 1;
+        return Response.json({ success: true, lowest_price: "$1.00" });
+      }
+      assert.fail(`unexpected Steam request ${url.toString()}`);
+    },
+  });
+
+  const inventory = await client.getCs2InventoryValue(steamId64);
+
+  assert.equal(inventory.pricedItemCount, 9);
+  assert.equal(inventory.estimatedValueCents, 900);
+  assert.equal(maxActivePriceRequests, 8);
+});
+
 test("checks Steam friends for VAC or game bans", async () => {
   const steamId64 = "76561198000000000";
   const friendIds = ["76561198000000001", "76561198000000002", "76561198000000003"];

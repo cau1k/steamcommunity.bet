@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { authClient } from '$lib/auth-client';
-	import { orpc } from '$lib/orpc';
+	import { client, orpc } from '$lib/orpc';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { PUBLIC_SERVER_URL } from '$env/static/public';
@@ -142,6 +142,23 @@
 	type ReportVote = 'up' | 'down';
 	type PlayerReportReason = 'rage hacking/spinning' | 'walling' | 'aim hacking' | 'radar';
 	type StoredPlayerReportReason = PlayerReportReason | 'legit';
+	type RefreshProvider =
+		| 'steam'
+		| 'steam_bans'
+		| 'steam_friends'
+		| 'steam_inventory'
+		| 'csstats'
+		| 'leetify'
+		| 'faceit';
+	type RefreshStepStatus = 'idle' | 'loading' | 'done' | 'warn' | 'error';
+
+	type RefreshStep = {
+		provider: RefreshProvider;
+		label: string;
+		message: string;
+		status: RefreshStepStatus;
+		detail: string;
+	};
 
 	const playerReportReasons: PlayerReportReason[] = [
 		'rage hacking/spinning',
@@ -149,22 +166,35 @@
 		'aim hacking',
 		'radar'
 	];
+	const refreshProviders: Array<Omit<RefreshStep, 'status' | 'detail'>> = [
+		{ provider: 'steam', label: 'Steam profile', message: 'Loading Steam profile' },
+		{ provider: 'steam_bans', label: 'Steam bans', message: 'Checking VAC and game bans' },
+		{
+			provider: 'steam_friends',
+			label: 'Banned friends',
+			message: 'Checking banned Steam friends'
+		},
+		{
+			provider: 'steam_inventory',
+			label: 'Inventory value',
+			message: 'Pricing CS2 inventory'
+		},
+		{ provider: 'csstats', label: 'CSStats', message: 'Loading CSStats profile' },
+		{ provider: 'leetify', label: 'Leetify', message: 'Loading Leetify profile' },
+		{ provider: 'faceit', label: 'FACEIT', message: 'Checking FACEIT account' }
+	];
 
 	const props: Props = $props();
 	const sessionQuery = authClient.useSession();
 	let reportVote = $state<ReportVote | null>(null);
 	let reportReason = $state<PlayerReportReason>('walling');
 	let reportNote = $state('');
+	let refreshPromise = $state<Promise<void> | null>(null);
+	let refreshStatusMessage = $state('');
+	let refreshSteps = $state<RefreshStep[]>(initialRefreshSteps());
 	// svelte-ignore state_referenced_locally -- SvelteKit recreates this route component per path.
 	const reportQuery = createQuery(
 		orpc.report.getOrGenerate.queryOptions({ input: { path: props.path } })
-	);
-	const refreshReportMutation = createMutation(
-		orpc.report.refresh.mutationOptions({
-			onSuccess: () => {
-				$reportQuery.refetch();
-			}
-		})
 	);
 	const refreshMutation = createMutation(
 		orpc.report.refreshProvider.mutationOptions({
@@ -194,7 +224,9 @@
 			value: formatFreshness(value)
 		}))
 	);
-	const isRefreshing = $derived($refreshReportMutation.isPending || $refreshMutation.isPending);
+	const isRefreshing = $derived(
+		Boolean(refreshPromise) || $refreshMutation.isPending
+	);
 	const steam = $derived(report?.providerDetails?.steam);
 	const csstats = $derived(report?.providerDetails?.csstats);
 	const faceit = $derived(report?.providerDetails?.faceit);
@@ -328,19 +360,87 @@
 		`${PUBLIC_SERVER_URL}/api/auth/steam?callbackURL=${encodeURIComponent(page.url.href)}`
 	);
 
-	function refreshReport() {
-		$refreshReportMutation.mutate({ path: props.path });
+	function initialRefreshSteps() {
+		return refreshProviders.map((step) => ({
+			...step,
+			status: 'idle' as const,
+			detail: 'Queued'
+		}));
+	}
+
+	function generatingReportSteps() {
+		return refreshProviders.map((step) => ({
+			...step,
+			status: 'loading' as const,
+			detail: step.message
+		}));
+	}
+
+	function updateRefreshStep(
+		provider: RefreshProvider,
+		status: RefreshStepStatus,
+		detail: string
+	) {
+		refreshSteps = refreshSteps.map((step) =>
+			step.provider === provider ? { ...step, status, detail } : step
+		);
+	}
+
+	async function refreshReport() {
+		if (!resolved || refreshPromise) {
+			return;
+		}
+		const steamId64 = resolved.steamId64;
+		refreshSteps = initialRefreshSteps();
+		refreshStatusMessage = 'Loading provider data';
+		const promise = runRefreshReport(steamId64);
+		refreshPromise = promise;
+		promise.then(
+			() => {
+				setTimeout(() => {
+					if (refreshPromise === promise) refreshPromise = null;
+				}, 700);
+			},
+			() => {
+				setTimeout(() => {
+					if (refreshPromise === promise) refreshPromise = null;
+				}, 1400);
+			}
+		);
+	}
+
+	async function runRefreshReport(steamId64: string) {
+		try {
+			await Promise.all(
+				refreshProviders.map(async (step) => {
+					updateRefreshStep(step.provider, 'loading', step.message);
+					const result = await client.report.refreshProviderCache({
+						steamId64,
+						provider: step.provider
+					});
+					updateRefreshStep(
+						step.provider,
+						result.fetchStatus === 'success' ? 'done' : 'warn',
+						result.fetchStatus === 'success' ? 'Loaded' : (result.errorMessage ?? result.fetchStatus)
+					);
+				})
+			);
+			refreshStatusMessage = 'Compiling report';
+			await client.report.regenerateFromCache({ path: props.path });
+			refreshStatusMessage = 'Report refreshed';
+			await $reportQuery.refetch();
+		} catch (error) {
+			refreshStatusMessage = error instanceof Error ? error.message : 'Refresh failed';
+			const loadingStep = refreshSteps.find((step) => step.status === 'loading');
+			if (loadingStep) {
+				updateRefreshStep(loadingStep.provider, 'error', 'Failed');
+			}
+			throw error;
+		}
 	}
 
 	function refresh(
-		provider:
-			| 'steam'
-			| 'steam_bans'
-			| 'steam_friends'
-			| 'steam_inventory'
-			| 'leetify'
-			| 'csstats'
-			| 'faceit'
+		provider: RefreshProvider
 	) {
 		if (!resolved) {
 			return;
@@ -720,12 +820,39 @@
 
 <section class="cs-shell">
 	{#if $reportQuery.isLoading}
-		<div class="cs-window">
-			<div class="cs-window-title">
-				<p>Generating board</p>
-			</div>
-			<div class="cs-window-body">
-				<p class="cs-muted">Loading cached report and provider snapshots.</p>
+		{@const generationSteps = generatingReportSteps()}
+		<div class="cs-modal-backdrop --locked" role="presentation">
+			<div
+				class="cs-window cs-modal cs-refresh-modal"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="generate-report-title"
+				tabindex="-1"
+			>
+				<div class="cs-window-title">
+					<p id="generate-report-title">Generating report</p>
+				</div>
+				<div class="cs-window-body">
+					<div class="cs-refresh-panel cs-bevel-in" aria-live="polite">
+						<div class="cs-refresh-panel-title">
+							<span>Loading provider data</span>
+							<span>generating</span>
+						</div>
+						<div class="cs-refresh-steps">
+							{#each generationSteps as step}
+								<div class="cs-refresh-row --{step.status}">
+									<div class="cs-refresh-row-head">
+										<span>{step.label}</span>
+										<span>{step.detail}</span>
+									</div>
+									<div class="cs-loadbar cs-bevel-in" aria-label={`${step.label}: ${step.detail}`}>
+										<span></span>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+				</div>
 			</div>
 		</div>
 	{:else if $reportQuery.isError}
@@ -773,11 +900,68 @@
 							<div class="min-w-0 flex-1">
 								<div class="cs-rank-and-name">
 									<div class="cs-name-stack">
-										<div class="cs-name-and-ranks">
-											<a class="cs-link min-w-0" href={steamProfileUrl}>
-												<h1 class="truncate text-3xl leading-none">{displayName}</h1>
-											</a>
-										</div>
+											<div class="cs-name-and-ranks">
+												<a class="cs-link min-w-0" href={steamProfileUrl}>
+													<h1 class="truncate text-3xl leading-none">{displayName}</h1>
+												</a>
+												<div class="cs-title-badges" aria-label="CS rank badges">
+													{#if currentPremier}
+														<div
+															class="cs-title-rank"
+															title={`${currentPremier.label} ${formatNumber(currentPremier.value)}`}
+															aria-label={`${currentPremier.label} rating ${formatNumber(currentPremier.value)}`}
+														>
+															<div class="cs-rating --tier-{premierTier(currentPremier.value)}" aria-hidden="true">
+																<svg viewBox="0 0 17 32" class="vertical-lines" aria-hidden="true">
+																	<path
+																		d="M5.44 2.13A2.6 2.6 0 0 1 7.99 0h1.86a.6.6 0 0 1 .6.7L4.83 31.5a.6.6 0 0 1-.6.5h-2.3c-1 0-1.76-.9-1.58-1.89l5.1-27.98ZM11.82.99c.1-.57.6-.99 1.18-.99h2.93a.6.6 0 0 1 .59.7l-5.4 30.31c-.1.57-.6.99-1.18.99H7a.6.6 0 0 1-.59-.7L11.82.98Z"
+																	/>
+																</svg>
+																<div class="label-outer">
+																	<div class="label-wrapper">
+																		<span class="label-large">{currentPremierParts.large}</span>
+																		{#if currentPremierParts.small}
+																			<span class="label-small">{currentPremierParts.small}</span>
+																		{/if}
+																	</div>
+																</div>
+															</div>
+														</div>
+													{/if}
+													{#if highestCompetitiveRank && highestCompetitiveRankImage}
+														<a
+															class="cs-title-rank cs-competitive-rank"
+															href={profileStats?.profileUrl}
+															title={`Highest map rank ${rankName(highestCompetitiveRank.displayRank)} on ${highestCompetitiveRank.map}`}
+															aria-label={`Highest map rank ${rankName(highestCompetitiveRank.displayRank)} on ${highestCompetitiveRank.map}`}
+														>
+															<span>HIGH:</span>
+															<img
+																src={highestCompetitiveRankImage}
+																alt={rankName(highestCompetitiveRank.displayRank)}
+																loading="lazy"
+																referrerpolicy="no-referrer"
+															/>
+														</a>
+													{/if}
+													{#if lowestCompetitiveRank && lowestCompetitiveRankImage}
+														<a
+															class="cs-title-rank cs-competitive-rank"
+															href={profileStats?.profileUrl}
+															title={`Lowest map rank ${rankName(lowestCompetitiveRank.displayRank)} on ${lowestCompetitiveRank.map}`}
+															aria-label={`Lowest map rank ${rankName(lowestCompetitiveRank.displayRank)} on ${lowestCompetitiveRank.map}`}
+														>
+															<span>LOW:</span>
+															<img
+																src={lowestCompetitiveRankImage}
+																alt={rankName(lowestCompetitiveRank.displayRank)}
+																loading="lazy"
+																referrerpolicy="no-referrer"
+															/>
+														</a>
+													{/if}
+												</div>
+											</div>
 										<div class="cs-source-links">
 											{#each sourceLinks as source}
 												{@const icon = sourceIcon(source.label)}
@@ -811,66 +995,7 @@
 															<span class="text-xs">{source.label.slice(0, 1)}</span>
 														{/if}
 													</a>
-													{#if source.label === 'CSStats'}
-														<div class="cs-title-badges" aria-label="CS rank badges">
-															{#if currentPremier}
-																<div
-																	class="cs-title-rank"
-																	title={`${currentPremier.label} ${formatNumber(currentPremier.value)}`}
-																	aria-label={`${currentPremier.label} rating ${formatNumber(currentPremier.value)}`}
-																>
-																	<div class="cs-rating --tier-{premierTier(currentPremier.value)}" aria-hidden="true">
-																		<svg viewBox="0 0 17 32" class="vertical-lines" aria-hidden="true">
-																			<path
-																				d="M5.44 2.13A2.6 2.6 0 0 1 7.99 0h1.86a.6.6 0 0 1 .6.7L4.83 31.5a.6.6 0 0 1-.6.5h-2.3c-1 0-1.76-.9-1.58-1.89l5.1-27.98ZM11.82.99c.1-.57.6-.99 1.18-.99h2.93a.6.6 0 0 1 .59.7l-5.4 30.31c-.1.57-.6.99-1.18.99H7a.6.6 0 0 1-.59-.7L11.82.98Z"
-																			/>
-																		</svg>
-																		<div class="label-outer">
-																			<div class="label-wrapper">
-																				<span class="label-large">{currentPremierParts.large}</span>
-																				{#if currentPremierParts.small}
-																					<span class="label-small">{currentPremierParts.small}</span>
-																				{/if}
-																			</div>
-																		</div>
-																	</div>
-																</div>
-															{/if}
-															{#if highestCompetitiveRank && highestCompetitiveRankImage}
-																<a
-																	class="cs-title-rank cs-competitive-rank"
-																	href={profileStats?.profileUrl}
-																	title={`Highest map rank ${rankName(highestCompetitiveRank.displayRank)} on ${highestCompetitiveRank.map}`}
-																	aria-label={`Highest map rank ${rankName(highestCompetitiveRank.displayRank)} on ${highestCompetitiveRank.map}`}
-																>
-																	<span>HIGH:</span>
-																	<img
-																		src={highestCompetitiveRankImage}
-																		alt={rankName(highestCompetitiveRank.displayRank)}
-																		loading="lazy"
-																		referrerpolicy="no-referrer"
-																	/>
-																</a>
-															{/if}
-															{#if lowestCompetitiveRank && lowestCompetitiveRankImage}
-																<a
-																	class="cs-title-rank cs-competitive-rank"
-																	href={profileStats?.profileUrl}
-																	title={`Lowest map rank ${rankName(lowestCompetitiveRank.displayRank)} on ${lowestCompetitiveRank.map}`}
-																	aria-label={`Lowest map rank ${rankName(lowestCompetitiveRank.displayRank)} on ${lowestCompetitiveRank.map}`}
-																>
-																	<span>LOW:</span>
-																	<img
-																		src={lowestCompetitiveRankImage}
-																		alt={rankName(lowestCompetitiveRank.displayRank)}
-																		loading="lazy"
-																		referrerpolicy="no-referrer"
-																	/>
-																</a>
-															{/if}
-														</div>
-													{/if}
-													{#if source.label === 'CSStats' && csstatsHeaderStats.length}
+														{#if source.label === 'CSStats' && csstatsHeaderStats.length}
 														<div class="cs-source-stats" aria-label="CSStats quick stats">
 															{#each csstatsHeaderStats as [label, value]}
 																<span><b>{label}:</b> {value}</span>
@@ -1191,6 +1316,54 @@
 				{/if}
 			</div>
 		</div>
+		{#if refreshPromise}
+			<div class="cs-modal-backdrop --locked" role="presentation">
+				<div
+					class="cs-window cs-modal cs-refresh-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="refresh-report-title"
+					tabindex="-1"
+				>
+					<div class="cs-window-title">
+						<p id="refresh-report-title">Refreshing report</p>
+					</div>
+					<div class="cs-window-body">
+						{#await refreshPromise}
+							<div class="cs-refresh-panel cs-bevel-in" aria-live="polite">
+								<div class="cs-refresh-panel-title">
+									<span>{refreshStatusMessage}</span>
+									<span
+										>{refreshSteps.filter((step) => step.status === 'done' || step.status === 'warn')
+											.length}/{refreshSteps.length}</span
+									>
+								</div>
+								<div class="cs-refresh-steps">
+									{#each refreshSteps as step}
+										<div class="cs-refresh-row --{step.status}">
+											<div class="cs-refresh-row-head">
+												<span>{step.label}</span>
+												<span>{step.detail}</span>
+											</div>
+											<div class="cs-loadbar cs-bevel-in" aria-label={`${step.label}: ${step.detail}`}>
+												<span></span>
+											</div>
+										</div>
+									{/each}
+								</div>
+							</div>
+						{:catch error}
+							<div class="cs-refresh-panel cs-bevel-in --error" aria-live="assertive">
+								<div class="cs-refresh-panel-title">
+									<span>{error instanceof Error ? error.message : 'Refresh failed'}</span>
+									<span>failed</span>
+								</div>
+							</div>
+						{/await}
+					</div>
+				</div>
+			</div>
+		{/if}
 		{#if reportVote}
 			<div class="cs-modal-backdrop" role="presentation" onclick={closeReportModal}>
 				<div

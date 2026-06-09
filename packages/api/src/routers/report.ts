@@ -33,6 +33,15 @@ import { normalizeSteamProfileInput } from "../steam-profile-input";
 
 const resolveInput = z.object({ path: z.string().min(1) });
 const steamIdInput = z.object({ steamId64: z.string().regex(/^\d{17}$/) });
+const providerInput = z.enum([
+  "steam",
+  "steam_bans",
+  "steam_friends",
+  "steam_inventory",
+  "leetify",
+  "csstats",
+  "faceit",
+]);
 const playerReportReason = z.enum([
   "rage hacking/spinning",
   "walling",
@@ -86,18 +95,37 @@ export const reportRouter = {
       return { resolved, report };
     }),
 
+    regenerateFromCache: publicProcedure.input(resolveInput).handler(async ({ context, input }) => {
+      const resolved = await resolveProfile(input.path);
+      const report = await generateReport(
+        resolved.steamId64,
+        resolved.sourcePath,
+        false,
+        context.session?.user.id,
+      );
+      return { resolved, report };
+    }),
+
+    refreshProviderCache: publicProcedure
+      .input(
+        steamIdInput.extend({
+          provider: providerInput,
+        }),
+      )
+      .handler(async ({ input }) => {
+        const row = await refreshProvider(input.steamId64, input.provider, true);
+        return {
+          provider: row.provider,
+          fetchStatus: row.fetchStatus,
+          errorMessage: row.errorMessage,
+          fetchedAt: row.fetchedAt,
+        };
+      }),
+
     refreshProvider: publicProcedure
       .input(
         steamIdInput.extend({
-          provider: z.enum([
-            "steam",
-            "steam_bans",
-            "steam_friends",
-            "steam_inventory",
-            "leetify",
-            "csstats",
-            "faceit",
-          ]),
+          provider: providerInput,
         }),
       )
       .handler(async ({ input }) => {

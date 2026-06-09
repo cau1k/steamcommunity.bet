@@ -428,6 +428,14 @@ p {
   overflow: auto;
 }
 
+.cs-modal-backdrop.--locked {
+  cursor: progress;
+}
+
+.cs-refresh-modal {
+  width: min(100%, 620px);
+}
+
 .cs-window-close {
   display: grid;
   width: 22px;
@@ -474,6 +482,123 @@ p {
   display: grid;
   width: min(100%, 420px);
   gap: 8px;
+}
+
+.cs-refresh-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  background: color-mix(in srgb, var(--cs-bg-3) 88%, #000);
+  padding: 10px;
+}
+
+.cs-refresh-modal .cs-refresh-panel {
+  margin-bottom: 0;
+}
+
+.cs-refresh-panel-title,
+.cs-refresh-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--cs-text);
+  text-shadow: 1px 1px var(--cs-black);
+}
+
+.cs-refresh-panel-title {
+  font-size: 18px;
+}
+
+.cs-refresh-panel-title span:last-child,
+.cs-refresh-row-head span:last-child {
+  color: color-mix(in srgb, var(--cs-text-3) 86%, #fff);
+  font-size: 14px;
+  text-align: right;
+}
+
+.cs-refresh-steps {
+  display: grid;
+  gap: 8px;
+}
+
+.cs-refresh-row {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cs-refresh-row-head {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.cs-loadbar {
+  position: relative;
+  height: 13px;
+  overflow: hidden;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.22), transparent), color-mix(in srgb, var(--cs-bg) 72%, #000);
+}
+
+.cs-loadbar span {
+  position: absolute;
+  inset: 2px auto 2px 2px;
+  width: 0;
+  background: var(--cs-accent);
+  box-shadow: inset 1px 1px color-mix(in srgb, #fff 28%, var(--cs-accent));
+}
+
+.cs-refresh-row.--idle .cs-loadbar span {
+  width: 8%;
+  background: var(--cs-track);
+}
+
+.cs-refresh-row.--loading .cs-loadbar span {
+  width: 58%;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--cs-accent) 0 8px,
+    color-mix(in srgb, var(--cs-accent) 68%, var(--cs-bg-3)) 8px 16px
+  );
+  animation: cs-loadbar-pulse 0.72s steps(8) infinite;
+}
+
+.cs-refresh-row.--done .cs-loadbar span {
+  width: calc(100% - 4px);
+  background: var(--cs-safe);
+}
+
+.cs-refresh-row.--warn .cs-loadbar span {
+  width: calc(100% - 4px);
+  background: var(--cs-accent);
+}
+
+.cs-refresh-row.--error .cs-loadbar span {
+  width: calc(100% - 4px);
+  background: var(--cs-danger);
+}
+
+.cs-refresh-row.--done .cs-refresh-row-head span:last-child {
+  color: var(--cs-safe);
+}
+
+.cs-refresh-row.--warn .cs-refresh-row-head span:last-child {
+  color: var(--cs-accent);
+}
+
+.cs-refresh-row.--error .cs-refresh-row-head span:last-child {
+  color: var(--cs-danger);
+}
+
+@keyframes cs-loadbar-pulse {
+  from {
+    background-position: 0 0;
+  }
+
+  to {
+    background-position: 16px 0;
+  }
 }
 
 .cs-source-row {
