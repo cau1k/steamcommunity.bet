@@ -28,7 +28,8 @@ import z from "zod";
 
 import { ORPCError } from "../index";
 import { protectedProcedure, publicProcedure } from "../index";
-import { scoreReport, TARGET_STEAM_ID, type Provider } from "../scoring";
+import { scoreReport, type Provider } from "../scoring";
+import { normalizeSteamProfileInput } from "../steam-profile-input";
 
 const resolveInput = z.object({ path: z.string().min(1) });
 const steamIdInput = z.object({ steamId64: z.string().regex(/^\d{17}$/) });
@@ -156,25 +157,24 @@ export const reportRouter = {
 };
 
 async function resolveProfile(path: string) {
-  const trimmed = path.trim();
-  const parsed = tryParseUrl(trimmed);
-  const pathname = parsed?.pathname ?? trimmed;
-  const profileMatch = /^\/?profiles\/(?<steamId64>\d{17})\/?$/.exec(pathname);
-  if (/^\d{17}$/.test(trimmed) || profileMatch?.groups?.steamId64) {
-    const steamId64 = profileMatch?.groups?.steamId64 ?? trimmed;
-    return { steamId64, sourcePath: `/profiles/${steamId64}`, vanity: null as string | null };
-  }
-
-  const vanity = /^\/?id\/(?<vanity>[^/]+)\/?$/.exec(pathname)?.groups?.vanity;
-  if (!vanity) {
+  const normalized = normalizeSteamProfileInput(path);
+  if (!normalized) {
     throw new ORPCError("BAD_REQUEST", { message: "Unsupported Steam profile path" });
   }
-  const steam = createSteamClient({ apiKey: env.STEAM_API_KEY });
-  const steamId64 = await steam.resolveVanity(vanity);
-  if (!steamId64) {
-    throw new ORPCError("NOT_FOUND", { message: `Steam vanity not found: ${vanity}` });
+  if (normalized.steamId64) {
+    return {
+      steamId64: normalized.steamId64,
+      sourcePath: normalized.sourcePath,
+      vanity: null as string | null,
+    };
   }
-  return { steamId64, sourcePath: `/id/${vanity}`, vanity };
+
+  const steam = createSteamClient({ apiKey: env.STEAM_API_KEY });
+  const steamId64 = await steam.resolveVanity(normalized.vanity ?? "");
+  if (!steamId64) {
+    throw new ORPCError("NOT_FOUND", { message: `Steam vanity not found: ${normalized.vanity}` });
+  }
+  return { steamId64, sourcePath: normalized.sourcePath, vanity: normalized.vanity };
 }
 
 async function generateReport(
@@ -330,7 +330,7 @@ async function refreshProviderUncached(steamId64: string, provider: Provider, fo
   const now = new Date();
   try {
     const payload = await fetchProviderPayload(steamId64, provider);
-    const cachePayload = cacheableProviderPayload(provider, payload);
+    const cachePayload = cacheableProviderPayload(provider, payload, current?.rawPayload);
     await ensureSteamProfile(
       steamId64,
       provider === "steam" ? (payload as SteamPlayerSummary | null) : null,
@@ -370,7 +370,7 @@ async function refreshProviderUncached(steamId64: string, provider: Provider, fo
   }
 }
 
-function cacheableProviderPayload(provider: Provider, payload: unknown) {
+function cacheableProviderPayload(provider: Provider, payload: unknown, previousPayload?: unknown) {
   if (provider === "csstats" && isRecord(payload)) {
     return {
       ...payload,
@@ -384,7 +384,48 @@ function cacheableProviderPayload(provider: Provider, payload: unknown) {
       games: Array.isArray(payload.games) ? recentLeetifyGames(payload.games) : payload.games,
     };
   }
+  if (provider === "steam_inventory" && isRecord(payload)) {
+    return preserveInventoryEstimate(payload, previousPayload);
+  }
   return payload;
+}
+
+function preserveInventoryEstimate(
+  payload: Record<string, unknown>,
+  previousPayload: unknown,
+): Record<string, unknown> {
+  if (
+    payload.accessible !== true ||
+    !isRecord(previousPayload) ||
+    previousPayload.accessible !== true ||
+    typeof previousPayload.estimatedValueCents !== "number" ||
+    payload.itemCount !== previousPayload.itemCount ||
+    payload.marketableItemCount !== previousPayload.marketableItemCount
+  ) {
+    return payload;
+  }
+  const previousPricedItemCount =
+    typeof previousPayload.pricedItemCount === "number" ? previousPayload.pricedItemCount : 0;
+  const nextPricedItemCount =
+    typeof payload.pricedItemCount === "number" ? payload.pricedItemCount : 0;
+  const nextEstimate =
+    typeof payload.estimatedValueCents === "number" ? payload.estimatedValueCents : null;
+  const likelyPartialPricing =
+    nextEstimate === null ||
+    nextPricedItemCount < previousPricedItemCount ||
+    nextEstimate < previousPayload.estimatedValueCents * 0.75;
+  if (!likelyPartialPricing) {
+    return payload;
+  }
+  return {
+    ...payload,
+    estimatedValueCents: previousPayload.estimatedValueCents,
+    pricedItemCount:
+      typeof previousPayload.pricedItemCount === "number"
+        ? previousPayload.pricedItemCount
+        : payload.pricedItemCount,
+    currency: previousPayload.currency ?? payload.currency,
+  };
 }
 
 function recentLeetifyGames(games: unknown[]) {
@@ -450,7 +491,10 @@ async function fetchProviderPayload(steamId64: string, provider: Provider) {
     return createSteamClient({ apiKey: env.STEAM_API_KEY }).getFriendBanStats(steamId64);
   }
   if (provider === "steam_inventory") {
-    return createSteamClient({ apiKey: env.STEAM_API_KEY }).getCs2InventoryValue(steamId64);
+    return createSteamClient({
+      apiKey: env.STEAM_API_KEY,
+      userAgent: env.CSSTATS_USER_AGENT,
+    }).getCs2InventoryValue(steamId64);
   }
   if (provider === "leetify") {
     return createLeetifyClient({
@@ -540,13 +584,8 @@ async function getLatestReport(steamId64: string, viewerUserId?: string) {
       .orderBy(desc(cheatSignal.weight))
       .limit(5),
   ]);
-  let caches = initialCaches;
   if (!report) {
     return undefined;
-  }
-  if (hasFakeCalibrationSteamCache(steamId64, caches)) {
-    await refreshProvider(steamId64, "steam", true);
-    caches = await db.select().from(providerCache).where(eq(providerCache.steamId, steamId64));
   }
   const verdict =
     (report.verdict as string) === "not_enough_evidence" ? "likely_not_cheating" : report.verdict;
@@ -557,23 +596,10 @@ async function getLatestReport(steamId64: string, viewerUserId?: string) {
       explanation: normalizeReportExplanation(report.explanation, verdict),
       reportCount: reports.accusationCount,
     },
-    buildProviderDetails(caches),
+    buildProviderDetails(initialCaches),
     reports,
     signalRows.map(signalDetail),
   );
-}
-
-function hasFakeCalibrationSteamCache(
-  steamId64: string,
-  caches: Array<typeof providerCache.$inferSelect>,
-) {
-  if (steamId64 !== TARGET_STEAM_ID) {
-    return false;
-  }
-  const steam = caches.find(
-    (cache) => cache.provider === "steam" && cache.fetchStatus === "success",
-  )?.rawPayload as SteamPlayerSummary | null | undefined;
-  return steam?.personaName === "Calibration target";
 }
 
 async function listPlayerReports(steamId64: string, viewerUserId?: string) {
@@ -589,9 +615,14 @@ async function listPlayerReports(steamId64: string, viewerUserId?: string) {
         status: playerReport.status,
         createdAt: playerReport.createdAt,
         reporterName: user.name,
+        reporterSteamId: account.accountId,
       })
       .from(playerReport)
       .leftJoin(user, eq(playerReport.reporterUserId, user.id))
+      .leftJoin(
+        account,
+        and(eq(account.userId, playerReport.reporterUserId), eq(account.providerId, "steam")),
+      )
       .where(and(eq(playerReport.steamId, steamId64), eq(playerReport.status, "active")))
       .orderBy(desc(playerReport.createdAt)),
     viewerUserId ? steamIdForUser(viewerUserId) : Promise.resolve(null),
@@ -604,6 +635,8 @@ async function listPlayerReports(steamId64: string, viewerUserId?: string) {
     .map((row) => ({
       id: row.id,
       reporterName: row.reporterName ?? "Steam user",
+      reporterSteamId: row.reporterSteamId,
+      reporterReportUrl: row.reporterSteamId ? `/profiles/${row.reporterSteamId}` : null,
       reason: row.reason,
       notes: row.notes,
       createdAt: row.createdAt,
@@ -705,14 +738,6 @@ function banSummary(ban: SteamBanState | null | undefined) {
     communityBanned: Boolean(ban?.communityBanned),
     daysSinceLastBan: ban?.daysSinceLastBan ?? null,
   };
-}
-
-function tryParseUrl(value: string) {
-  try {
-    return new URL(value);
-  } catch {
-    return null;
-  }
 }
 
 function hoursFromNow(hours: number) {

@@ -5,10 +5,10 @@ import type {
   LeetifyProfile,
   SteamBanState,
   SteamFriendBanStats,
+  SteamInventoryValue,
+  SteamPlayerSummary,
 } from "@steamcommunity.bet/providers";
 import { buildLeetifyProfileStats } from "@steamcommunity.bet/providers/leetify-client";
-
-export const TARGET_STEAM_ID = "76561199857251932";
 
 export type Provider =
   | "steam"
@@ -41,7 +41,7 @@ export function scoreReport(
 }
 
 type Signal = {
-  provider: Provider | "calibration";
+  provider: Provider;
   signal: string;
   value: string;
   weight: number;
@@ -55,35 +55,32 @@ function buildSignals(
   accusationReportCount: number,
 ): Signal[] {
   const signals: Signal[] = [];
-  if (steamId64 === TARGET_STEAM_ID) {
-    signals.push(
-      calibrationSignal(
-        "no_faceit_high_premier",
-        "Premier rating 24,856 with no FACEIT account",
-        20,
-        "high",
-      ),
-      calibrationSignal(
-        "high_performance_no_faceit",
-        "High performance stats with no FACEIT account",
-        20,
-        "high",
-      ),
-      calibrationSignal(
-        "premier_rating_jump",
-        "Season Three to Four jump: 12,634 to 24,856",
-        13,
-        "medium",
-      ),
-      calibrationSignal(
-        "dust2_rank_jump",
-        "Dust2 rank jump: Gold Nova II to Legendary Eagle",
-        9,
-        "medium",
-      ),
-      calibrationSignal("elevated_leetify_rating", "Recent Leetify rating 6.2", 5, "medium"),
-      calibrationSignal("no_leetify_account", "No Leetify account registered", 5, "medium"),
-    );
+  const steam = caches.find(
+    (cache) => cache.provider === "steam" && cache.fetchStatus === "success",
+  )?.rawPayload as SteamPlayerSummary | null | undefined;
+  if (typeof steam?.visibilityState === "number" && steam.visibilityState !== 3) {
+    signals.push({
+      provider: "steam",
+      signal: "steam_private_profile",
+      value: `Steam profile visibility state ${steam.visibilityState}`,
+      weight: 5,
+      confidence: "low",
+      sourceUrl: steam.profileUrl ?? `https://steamcommunity.com/profiles/${steamId64}`,
+    });
+  }
+
+  const steamInventory = caches.find(
+    (cache) => cache.provider === "steam_inventory" && cache.fetchStatus === "success",
+  )?.rawPayload as SteamInventoryValue | null | undefined;
+  if (steamInventory?.accessible === false) {
+    signals.push({
+      provider: "steam_inventory",
+      signal: "steam_private_inventory",
+      value: "CS2 inventory is private or unavailable",
+      weight: 5,
+      confidence: "low",
+      sourceUrl: `https://steamcommunity.com/profiles/${steamId64}/inventory/`,
+    });
   }
 
   const steamBan = caches.find(
@@ -123,6 +120,31 @@ function buildSignals(
   const hasFaceit = faceit?.found === true;
   const lacksFaceit =
     faceit?.found === false || (faceit === undefined && csstats?.hasFaceit === false);
+  if (lacksFaceit) {
+    signals.push({
+      provider: "faceit",
+      signal: "no_faceit_account",
+      value: "No FACEIT account found",
+      weight: 5,
+      confidence: "low",
+      sourceUrl: null,
+    });
+  }
+  if (
+    typeof steam?.visibilityState === "number" &&
+    steam.visibilityState !== 3 &&
+    steamInventory?.accessible === false &&
+    lacksFaceit
+  ) {
+    signals.push({
+      provider: "steam",
+      signal: "hidden_profile_no_faceit_cluster",
+      value: "Private Steam profile; private CS2 inventory; no FACEIT account found",
+      weight: 15,
+      confidence: "medium",
+      sourceUrl: steam.profileUrl ?? `https://steamcommunity.com/profiles/${steamId64}`,
+    });
+  }
   if (faceit?.hasEsea) {
     signals.push({
       provider: "faceit",
@@ -230,11 +252,43 @@ function buildSignals(
       sourceUrl: csstats?.profileUrl ?? null,
     });
   }
+  const mapRankDrop = largestCompetitiveRankDrop(csstats?.competitiveRanks ?? []);
+  if (mapRankDrop && mapRankDrop.delta >= 6) {
+    signals.push({
+      provider: "csstats",
+      signal: "csstats_map_rank_volatility",
+      value: `${mapRankDrop.map}: ${mapRankDrop.currentRank} to ${mapRankDrop.bestRank}`,
+      weight: 10,
+      confidence: "medium",
+      sourceUrl: csstats?.profileUrl ?? null,
+    });
+  }
 
   const leetify = caches.find(
     (cache) => cache.provider === "leetify" && cache.fetchStatus === "success",
   )?.rawPayload as LeetifyProfile | null | undefined;
   const leetifyStats = buildLeetifyProfileStats(steamId64, leetify);
+  const premierForAimContext = currentPremierRating(csstats, leetifyStats);
+  const premierVolume = premierSeasonVolume(csstats, leetifyStats);
+  if (
+    typeof leetifyStats?.aim === "number" &&
+    leetifyStats.aim >= 90 &&
+    lacksFaceit &&
+    typeof premierForAimContext === "number" &&
+    premierForAimContext > 0 &&
+    premierForAimContext <= 10_000 &&
+    premierVolume &&
+    premierVolume.wins > 15
+  ) {
+    signals.push({
+      provider: "leetify",
+      signal: "high_aim_low_premier_no_faceit",
+      value: `Aim ${leetifyStats.aim}; Premier ${premierForAimContext}; FACEIT absent; ${premierVolume.label} ${premierVolume.wins} wins`,
+      weight: 25,
+      confidence: "high",
+      sourceUrl: leetifyStats.profileUrl,
+    });
+  }
   if (typeof leetify?.rating === "number" && leetify.rating >= 6) {
     signals.push({
       provider: "leetify",
@@ -261,6 +315,16 @@ function buildSignals(
       signal: "leetify_extreme_aim",
       value: `Aim ${leetifyStats.aim}`,
       weight: 15,
+      confidence: "high",
+      sourceUrl: leetifyStats.profileUrl,
+    });
+  }
+  if (typeof leetifyStats?.aim === "number" && leetifyStats.aim > 95 && lacksFaceit) {
+    signals.push({
+      provider: "leetify",
+      signal: "leetify_extreme_aim_no_faceit",
+      value: `Aim ${leetifyStats.aim}; FACEIT absent`,
+      weight: 20,
       confidence: "high",
       sourceUrl: leetifyStats.profileUrl,
     });
@@ -326,7 +390,7 @@ function buildSignals(
 
   if (accusationReportCount > 0) {
     signals.push({
-      provider: "calibration",
+      provider: "steam",
       signal: "signed_in_accusations",
       value: `${accusationReportCount} active signed-in cheating accusation(s)`,
       weight: Math.min(accusationReportCount * 2, 10),
@@ -368,6 +432,57 @@ function largestPremierJump(ratings: CSStatsPlayerProfile["premierRatings"]) {
   return largest;
 }
 
+function largestCompetitiveRankDrop(ranks: CSStatsPlayerProfile["competitiveRanks"]) {
+  let largest: {
+    map: string;
+    currentRank: number;
+    bestRank: number;
+    delta: number;
+  } | null = null;
+  for (const rank of ranks) {
+    if (typeof rank.latestRank !== "number" || typeof rank.bestRank !== "number") {
+      continue;
+    }
+    const delta = rank.bestRank - rank.latestRank;
+    if (delta > (largest?.delta ?? 0)) {
+      largest = {
+        map: rank.map,
+        currentRank: rank.latestRank,
+        bestRank: rank.bestRank,
+        delta,
+      };
+    }
+  }
+  return largest;
+}
+
+function currentPremierRating(
+  csstats: CSStatsPlayerProfile | null | undefined,
+  leetifyStats: ReturnType<typeof buildLeetifyProfileStats>,
+) {
+  const candidates = [csstats?.premierRating, leetifyStats?.premierRating];
+  return candidates.find((rating): rating is number => typeof rating === "number" && rating > 0);
+}
+
+function premierSeasonVolume(
+  csstats: CSStatsPlayerProfile | null | undefined,
+  leetifyStats: ReturnType<typeof buildLeetifyProfileStats>,
+) {
+  const seasons = [...(csstats?.premierRatings ?? []), ...(leetifyStats?.premierRatings ?? [])]
+    .filter((rating) => typeof rating.wins === "number")
+    .sort((left, right) => right.season - left.season)
+    .slice(0, 2);
+  const current = seasons[0];
+  const previous = seasons[1];
+  if (!current) {
+    return null;
+  }
+  if (previous && previous.wins > current.wins) {
+    return { label: `Season ${previous.season}`, wins: previous.wins };
+  }
+  return { label: `Season ${current.season}`, wins: current.wins };
+}
+
 function faceitInactiveOverOneYear(faceit: FaceitProfile | null | undefined) {
   if (!faceit?.found || !faceit.lastPlayedAt) {
     return false;
@@ -379,20 +494,4 @@ function faceitInactiveOverOneYear(faceit: FaceitProfile | null | undefined) {
   const oneYearAgo = new Date();
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
   return lastPlayed <= oneYearAgo;
-}
-
-function calibrationSignal(
-  signal: string,
-  value: string,
-  weight: number,
-  confidence: "medium" | "high",
-): Signal {
-  return {
-    provider: "calibration",
-    signal,
-    value,
-    weight,
-    confidence,
-    sourceUrl: `https://steamcommunity.com/profiles/${TARGET_STEAM_ID}`,
-  };
 }

@@ -4,4 +4,6 @@
 	const { data } = $props();
 </script>
 
-<ReportBoard path={data.path} />
+{#key data.path}
+	<ReportBoard path={data.path} />
+{/key}

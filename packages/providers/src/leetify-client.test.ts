@@ -105,3 +105,29 @@ test("parses full Leetify public profile stats", async () => {
   assert.equal(stats?.bestRating, 8.17);
   assert.equal(stats?.recentResults.join(""), "WLW");
 });
+
+test("treats zero Leetify combat timing metrics as missing", () => {
+  const steamId64 = "76561198003732047";
+  const stats = buildLeetifyProfileStats(steamId64, {
+    steam64Id: steamId64,
+    recentGameRatings: {
+      aim: 94.06,
+      timeToDamage: 0,
+      crosshairPlacement: 0,
+    },
+    games: [
+      {
+        isCs2: true,
+        dataSource: "matchmaking",
+        accuracyHead: 0,
+        reactionTime: 0,
+        preaim: 0,
+      },
+    ],
+  });
+
+  assert.equal(stats?.aim, 94.06);
+  assert.equal(stats?.hsPercentage, null);
+  assert.equal(stats?.timeToDamage, null);
+  assert.equal(stats?.crosshairPlacement, null);
+});

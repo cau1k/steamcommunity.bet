@@ -7,7 +7,6 @@
 		<nav class="flex flex-wrap items-center gap-4 text-sm">
 			<a href="/" class="cs-nav-link">Find Player</a>
 			<a href="/dashboard" class="cs-nav-link">Dashboard</a>
-			<a href="/profiles/76561199857251932" class="cs-nav-link">Calibration</a>
 		</nav>
 		<div class="flex items-center gap-2">
 			<UserMenu />

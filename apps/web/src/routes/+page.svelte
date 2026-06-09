@@ -1,36 +1,19 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { normalizeSteamProfileInput } from '@steamcommunity.bet/api/steam-profile-input';
 
-	let lookup = $state('https://steamcommunity.com/profiles/76561199857251932');
+	let lookup = $state('');
 	let error = $state<string | null>(null);
 
 	function submit(event: SubmitEvent) {
 		event.preventDefault();
-		const target = resolveInput(lookup);
+		const target = normalizeSteamProfileInput(lookup)?.sourcePath;
 		if (!target) {
-			error = 'Paste a Steam profile URL, vanity URL, or SteamID64.';
+			error = 'Paste a Steam profile URL, SteamID64, or Steam ID.';
 			return;
 		}
 		error = null;
 		goto(target);
-	}
-
-	function resolveInput(value: string) {
-		const trimmed = value.trim();
-		if (/^\d{17}$/.test(trimmed)) {
-			return `/profiles/${trimmed}`;
-		}
-		try {
-			const url = new URL(trimmed);
-			if (url.pathname.startsWith('/profiles/') || url.pathname.startsWith('/id/')) {
-				return url.pathname;
-			}
-		} catch {
-			if (trimmed.startsWith('/profiles/') || trimmed.startsWith('/id/')) {
-				return trimmed;
-			}
-		}
-		return null;
 	}
 </script>
 
@@ -46,8 +29,14 @@
 					<p class="cs-label">Player lookup</p>
 					<h1 class="text-4xl leading-none sm:text-5xl">steamcommunity.bet</h1>
 					<p class="max-w-2xl text-lg text-[var(--cs-text-2)]">
-						Paste a Steam profile. Get a conservative cheating-risk report with evidence links,
-						provider freshness, and missing data.
+						Check a Counter-Strike player before you queue, report, or cope. Pulls Steam, CSStats,
+						Leetify, and FACEIT into one readable call.
+					</p>
+					<p class="max-w-2xl text-base text-[var(--cs-text-2)]">
+						Shortcut: replace steamcommunity<strong class="cs-domain-example">.com</strong> with
+						steamcommunity<strong class="cs-domain-example">.bet</strong>. Example:
+						steamcommunity<strong class="cs-domain-example">.com</strong>/id/caulkenstein becomes
+						steamcommunity<strong class="cs-domain-example">.bet</strong>/id/caulkenstein.
 					</p>
 				</div>
 
@@ -55,7 +44,7 @@
 					<input
 						class="cs-input"
 						bind:value={lookup}
-						placeholder="Steam profile URL, vanity URL, or SteamID64"
+						placeholder="Steam profile URL, SteamID64, STEAM_0:1:123, or [U:1:247]"
 					/>
 					<button class="cs-btn" type="submit">Generate report</button>
 				</form>
@@ -64,12 +53,6 @@
 					<p class="text-sm text-[var(--cs-danger)]">{error}</p>
 				{/if}
 
-				<div class="flex flex-wrap gap-3">
-					<a class="cs-btn inline-flex items-center" href="/profiles/76561199857251932">
-						Open calibration profile
-					</a>
-					<a class="cs-btn inline-flex items-center" href="/id/piewhat">Open piewhat</a>
-				</div>
 			</div>
 		</div>
 	</div>

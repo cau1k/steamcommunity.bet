@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { authClient } from '$lib/auth-client';
 	import { orpc } from '$lib/orpc';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { PUBLIC_SERVER_URL } from '$env/static/public';
 	import ThumbsDownSharpIcon from '@iconify-svelte/pixelarticons/thumbs-down-sharp';
@@ -31,6 +32,8 @@
 		recentCheatingReports: Array<{
 			id: number;
 			reporterName: string;
+			reporterSteamId: string | null;
+			reporterReportUrl: string | null;
 			reason: string;
 			notes: string | null;
 			createdAt: string | Date;
@@ -243,7 +246,19 @@
 					['HS%', formatPercent(leetify.hsPercentage)],
 					['Time to Damage', formatMilliseconds(leetify.timeToDamage)],
 					['crosshair', formatDegrees(leetify.crosshairPlacement)]
-				]
+				].filter(([, value]) => value)
+			: []
+	);
+	const csstatsHeaderStats = $derived(
+		csstats
+			? [
+					['HS', formatPercent(csstats.hsPercentage)],
+					['K/D', formatDecimal(csstats.kdRatio)],
+					['HLTV', formatDecimal(csstats.hltvRating)],
+					['ADR', formatNumber(csstats.adr)],
+					['Winrate', formatPercent(csstats.winRate)],
+					['Matches', formatNumber(csstats.matches)]
+				].filter(([, value]) => value)
 			: []
 	);
 	const steamHeaderStats = $derived(steam ? steamQuickStats(steam) : []);
@@ -278,14 +293,21 @@
 			};
 		})
 	);
-	const highestCompetitiveRank = $derived(
+	const competitiveRankSummaries = $derived(
 		(profileStats?.competitiveRanks ?? [])
 			.map((rank) => ({
 				...rank,
 				displayRank: rank.latestRank ?? rank.bestRank
 			}))
 			.filter((rank) => typeof rank.displayRank === 'number')
-			.toSorted((a, b) => (b.displayRank ?? 0) - (a.displayRank ?? 0))[0] ?? null
+	);
+	const highestCompetitiveRank = $derived(
+		competitiveRankSummaries.toSorted((a, b) => (b.displayRank ?? 0) - (a.displayRank ?? 0))[0] ??
+			null
+	);
+	const lowestCompetitiveRank = $derived(
+		competitiveRankSummaries.toSorted((a, b) => (a.displayRank ?? 0) - (b.displayRank ?? 0))[0] ??
+			null
 	);
 	const currentPremier = $derived(
 		displayPremierRating(profileStats)
@@ -296,6 +318,7 @@
 			: null
 	);
 	const highestCompetitiveRankImage = $derived(rankImageUrl(highestCompetitiveRank?.displayRank));
+	const lowestCompetitiveRankImage = $derived(rankImageUrl(lowestCompetitiveRank?.displayRank));
 	const currentPremierParts = $derived(premierParts(currentPremier?.value));
 	const lastRefreshedLabel = $derived(formatLastRefreshed(report?.refreshedAt));
 	const reportModalTitle = $derived(reportVote ? reportVoteTitle(reportVote, report?.verdict) : '');
@@ -640,6 +663,11 @@
 		return reason;
 	}
 
+	function navigateToReport(event: MouseEvent, href: string) {
+		event.preventDefault();
+		goto(href);
+	}
+
 	function rankName(rank: number | null | undefined) {
 		if (!rank) return 'Unranked';
 		return (
@@ -812,9 +840,10 @@
 																<a
 																	class="cs-title-rank cs-competitive-rank"
 																	href={profileStats?.profileUrl}
-																	title={`${rankName(highestCompetitiveRank.displayRank)} on ${highestCompetitiveRank.map}`}
-																	aria-label={`Highest competitive rank ${rankName(highestCompetitiveRank.displayRank)} on ${highestCompetitiveRank.map}`}
+																	title={`Highest map rank ${rankName(highestCompetitiveRank.displayRank)} on ${highestCompetitiveRank.map}`}
+																	aria-label={`Highest map rank ${rankName(highestCompetitiveRank.displayRank)} on ${highestCompetitiveRank.map}`}
 																>
+																	<span>HIGH:</span>
 																	<img
 																		src={highestCompetitiveRankImage}
 																		alt={rankName(highestCompetitiveRank.displayRank)}
@@ -823,6 +852,29 @@
 																	/>
 																</a>
 															{/if}
+															{#if lowestCompetitiveRank && lowestCompetitiveRankImage}
+																<a
+																	class="cs-title-rank cs-competitive-rank"
+																	href={profileStats?.profileUrl}
+																	title={`Lowest map rank ${rankName(lowestCompetitiveRank.displayRank)} on ${lowestCompetitiveRank.map}`}
+																	aria-label={`Lowest map rank ${rankName(lowestCompetitiveRank.displayRank)} on ${lowestCompetitiveRank.map}`}
+																>
+																	<span>LOW:</span>
+																	<img
+																		src={lowestCompetitiveRankImage}
+																		alt={rankName(lowestCompetitiveRank.displayRank)}
+																		loading="lazy"
+																		referrerpolicy="no-referrer"
+																	/>
+																</a>
+															{/if}
+														</div>
+													{/if}
+													{#if source.label === 'CSStats' && csstatsHeaderStats.length}
+														<div class="cs-source-stats" aria-label="CSStats quick stats">
+															{#each csstatsHeaderStats as [label, value]}
+																<span><b>{label}:</b> {value}</span>
+															{/each}
 														</div>
 													{/if}
 													{#if source.label === 'Steam' && steamHeaderStats.length}
@@ -969,7 +1021,17 @@
 								{#each report.recentCheatingReports as playerReport}
 									<div class="cs-report-list-item">
 										<div class="flex min-w-0 items-baseline gap-2">
-											<span class="cs-report-reporter">{playerReport.reporterName}</span>
+											{#if playerReport.reporterReportUrl}
+												<a
+													class="cs-report-reporter cs-link"
+													href={playerReport.reporterReportUrl}
+													onclick={(event) => navigateToReport(event, playerReport.reporterReportUrl ?? '/')}
+												>
+													{playerReport.reporterName}
+												</a>
+											{:else}
+												<span class="cs-report-reporter">{playerReport.reporterName}</span>
+											{/if}
 											<span class="cs-report-reason">{reportReasonLabel(playerReport.reason)}</span>
 										</div>
 										{#if playerReport.notes}

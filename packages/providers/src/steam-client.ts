@@ -94,6 +94,7 @@ export type SteamClientConfig = {
   baseUrl?: string;
   communityBaseUrl?: string;
   marketBaseUrl?: string;
+  userAgent?: string;
   fetch?: typeof fetch;
 };
 
@@ -143,6 +144,9 @@ export function createSteamClient(config: SteamClientConfig) {
   const communityBaseUrl = config.communityBaseUrl ?? "https://steamcommunity.com";
   const marketBaseUrl = config.marketBaseUrl ?? "https://steamcommunity.com";
   const fetchImpl = config.fetch ?? fetch;
+  const userAgent =
+    config.userAgent ??
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) steamcommunity.bet/0.1";
 
   function requireApiKey() {
     if (!config.apiKey) {
@@ -318,7 +322,16 @@ export function createSteamClient(config: SteamClientConfig) {
     url.searchParams.set("appid", "730");
     url.searchParams.set("currency", "1");
     url.searchParams.set("market_hash_name", marketHashName);
-    const response = await fetchImpl(url);
+    const response = await fetchImpl(url, {
+      headers: {
+        Accept: "application/json, text/javascript, */*; q=0.01",
+        Referer: new URL(
+          `/market/listings/730/${encodeURIComponent(marketHashName)}`,
+          marketBaseUrl,
+        ).toString(),
+        "User-Agent": userAgent,
+      },
+    });
     if (!response.ok) {
       return null;
     }

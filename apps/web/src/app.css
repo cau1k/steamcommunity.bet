@@ -299,6 +299,39 @@ p {
   color: #fff;
 }
 
+.cs-footer {
+  background: var(--cs-bg-2);
+  border-top: 1px solid var(--cs-light);
+  box-shadow: inset 0 1px var(--cs-dark);
+  color: var(--cs-text-3);
+  text-shadow: 1px 1px var(--cs-black);
+}
+
+.cs-footer-mark {
+  color: var(--cs-text);
+  line-height: 1;
+}
+
+.cs-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.cs-footer-links a,
+.cs-footer-links span {
+  color: var(--cs-text-2);
+  text-decoration: none;
+}
+
+.cs-footer-links a:hover {
+  color: var(--cs-accent);
+}
+
+.cs-footer-links span {
+  color: var(--cs-text-3);
+}
+
 .steam-login-button {
   display: inline-flex;
   width: max-content;
@@ -531,6 +564,12 @@ p {
   left: 7px;
   width: 1px;
   height: 13px;
+}
+
+.cs-domain-example {
+  color: var(--cs-text);
+  text-shadow: 1px 1px var(--cs-black);
+  white-space: nowrap;
 }
 
 .cs-faceit-badges {
@@ -833,6 +872,16 @@ p {
   height: 24px;
   object-fit: contain;
   image-rendering: auto;
+}
+
+.cs-competitive-rank {
+  align-items: center;
+  gap: 4px;
+  color: var(--cs-text-muted);
+  font-size: 12px;
+  line-height: 1;
+  text-decoration: none;
+  text-shadow: 1px 1px var(--cs-black);
 }
 
 .cs-rating {

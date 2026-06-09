@@ -1,22 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { scoreReport, TARGET_STEAM_ID } from "./scoring.ts";
-
-test("calibration target produces likely_cheating without trusted-ban certainty", () => {
-  const report = scoreReport(TARGET_STEAM_ID, [], 0);
-
-  assert.equal(report.verdict, "likely_cheating");
-  assert.equal(report.score, 72);
-  assert.equal(
-    report.explanation,
-    "Available provider signals indicate this profile is likely cheating.",
-  );
-  assert.equal(
-    report.signals.some((signal) => signal.signal === "trusted_enforcement"),
-    false,
-  );
-});
+import { scoreReport } from "./scoring.ts";
 
 test("non-target profile stays likely_not_cheating without signals", () => {
   const report = scoreReport("76561198000000000", [], 0);
@@ -182,5 +167,274 @@ test("banned Steam friends are low-confidence evidence", () => {
   assert.deepEqual(
     report.signals.map((signal) => [signal.signal, signal.weight, signal.confidence]),
     [["steam_banned_friends", 6, "low"]],
+  );
+});
+
+test("private Steam profile and inventory are low-weight standalone signals", () => {
+  const report = scoreReport(
+    "76561198000000004",
+    [
+      {
+        provider: "steam",
+        fetchStatus: "success",
+        rawPayload: {
+          steamId64: "76561198000000004",
+          profileUrl: "https://steamcommunity.com/profiles/76561198000000004",
+          visibilityState: 1,
+        },
+      },
+      {
+        provider: "steam_inventory",
+        fetchStatus: "success",
+        rawPayload: {
+          accessible: false,
+          itemCount: null,
+          marketableItemCount: null,
+          pricedItemCount: 0,
+          currency: "USD",
+          estimatedValueCents: null,
+        },
+      },
+    ] as never,
+    0,
+  );
+
+  assert.equal(report.score, 10);
+  assert.deepEqual(
+    report.signals.map((signal) => [signal.signal, signal.weight, signal.confidence]),
+    [
+      ["steam_private_profile", 5, "low"],
+      ["steam_private_inventory", 5, "low"],
+    ],
+  );
+});
+
+test("private profile, private inventory, and no FACEIT form a medium aggregate signal", () => {
+  const report = scoreReport(
+    "76561198000000007",
+    [
+      {
+        provider: "steam",
+        fetchStatus: "success",
+        rawPayload: {
+          steamId64: "76561198000000007",
+          profileUrl: "https://steamcommunity.com/profiles/76561198000000007",
+          visibilityState: 1,
+        },
+      },
+      {
+        provider: "steam_inventory",
+        fetchStatus: "success",
+        rawPayload: {
+          accessible: false,
+          itemCount: null,
+          marketableItemCount: null,
+          pricedItemCount: 0,
+          currency: "USD",
+          estimatedValueCents: null,
+        },
+      },
+      {
+        provider: "faceit",
+        fetchStatus: "success",
+        rawPayload: {
+          found: false,
+          faceitUrl: null,
+        },
+      },
+    ] as never,
+    0,
+  );
+
+  assert.deepEqual(
+    report.signals.map((signal) => [signal.signal, signal.weight, signal.confidence]),
+    [
+      ["steam_private_profile", 5, "low"],
+      ["steam_private_inventory", 5, "low"],
+      ["no_faceit_account", 5, "low"],
+      ["hidden_profile_no_faceit_cluster", 15, "medium"],
+    ],
+  );
+});
+
+test("missing FACEIT account is a low-weight signal", () => {
+  const report = scoreReport(
+    "76561198000000005",
+    [
+      {
+        provider: "faceit",
+        fetchStatus: "success",
+        rawPayload: {
+          found: false,
+          faceitUrl: null,
+        },
+      },
+    ] as never,
+    0,
+  );
+
+  assert.equal(report.score, 5);
+  assert.deepEqual(
+    report.signals.map((signal) => [signal.signal, signal.weight, signal.confidence]),
+    [["no_faceit_account", 5, "low"]],
+  );
+});
+
+test("high aim with low Premier and no FACEIT is a high-confidence interop signal", () => {
+  const steamId64 = "76561198000000006";
+  const report = scoreReport(
+    steamId64,
+    [
+      {
+        provider: "faceit",
+        fetchStatus: "success",
+        rawPayload: {
+          found: false,
+          faceitUrl: null,
+        },
+      },
+      {
+        provider: "csstats",
+        fetchStatus: "success",
+        rawPayload: {
+          steamId64,
+          profileUrl: `https://csgostats.gg/player/${steamId64}`,
+          statsUrl: `https://csgostats.gg/player/${steamId64}/stats`,
+          premierRating: 8_500,
+          hasFaceit: false,
+          premierRatings: [{ season: 4, latestRating: 8_500, bestRating: 8_800, wins: 16 }],
+        },
+      },
+      {
+        provider: "leetify",
+        fetchStatus: "success",
+        rawPayload: {
+          steam64Id: steamId64,
+          recentGameRatings: {
+            aim: 91.2,
+          },
+        },
+      },
+    ] as never,
+    0,
+  );
+
+  assert.deepEqual(
+    report.signals.map((signal) => [signal.signal, signal.weight, signal.confidence]),
+    [
+      ["no_faceit_account", 5, "low"],
+      ["high_aim_low_premier_no_faceit", 25, "high"],
+    ],
+  );
+});
+
+test("high aim with low Premier and no FACEIT ignores placement-only Premier volume", () => {
+  const steamId64 = "76561198000000009";
+  const report = scoreReport(
+    steamId64,
+    [
+      {
+        provider: "faceit",
+        fetchStatus: "success",
+        rawPayload: {
+          found: false,
+          faceitUrl: null,
+        },
+      },
+      {
+        provider: "csstats",
+        fetchStatus: "success",
+        rawPayload: {
+          steamId64,
+          profileUrl: `https://csgostats.gg/player/${steamId64}`,
+          statsUrl: `https://csgostats.gg/player/${steamId64}/stats`,
+          premierRating: 8_500,
+          hasFaceit: false,
+          premierRatings: [{ season: 4, latestRating: 8_500, bestRating: 8_800, wins: 10 }],
+        },
+      },
+      {
+        provider: "leetify",
+        fetchStatus: "success",
+        rawPayload: {
+          steam64Id: steamId64,
+          recentGameRatings: {
+            aim: 91.2,
+          },
+        },
+      },
+    ] as never,
+    0,
+  );
+
+  assert.deepEqual(
+    report.signals.map((signal) => [signal.signal, signal.weight, signal.confidence]),
+    [["no_faceit_account", 5, "low"]],
+  );
+});
+
+test("extreme aim with no FACEIT is a high signal", () => {
+  const steamId64 = "76561198000000010";
+  const report = scoreReport(
+    steamId64,
+    [
+      {
+        provider: "faceit",
+        fetchStatus: "success",
+        rawPayload: {
+          found: false,
+          faceitUrl: null,
+        },
+      },
+      {
+        provider: "leetify",
+        fetchStatus: "success",
+        rawPayload: {
+          steam64Id: steamId64,
+          recentGameRatings: {
+            aim: 96.4,
+          },
+        },
+      },
+    ] as never,
+    0,
+  );
+
+  assert.deepEqual(
+    report.signals.map((signal) => [signal.signal, signal.weight, signal.confidence]),
+    [
+      ["no_faceit_account", 5, "low"],
+      ["leetify_extreme_aim", 15, "high"],
+      ["leetify_extreme_aim_no_faceit", 20, "high"],
+    ],
+  );
+});
+
+test("competitive map rank volatility is a medium signal", () => {
+  const steamId64 = "76561198000000008";
+  const report = scoreReport(
+    steamId64,
+    [
+      {
+        provider: "csstats",
+        fetchStatus: "success",
+        rawPayload: {
+          steamId64,
+          profileUrl: `https://csgostats.gg/player/${steamId64}`,
+          statsUrl: `https://csgostats.gg/player/${steamId64}/stats`,
+          premierRatings: [],
+          competitiveRanks: [
+            { map: "de_mirage", latestRank: 5, bestRank: 12, wins: 30 },
+            { map: "de_nuke", latestRank: 9, bestRank: 12, wins: 30 },
+          ],
+        },
+      },
+    ] as never,
+    0,
+  );
+
+  assert.deepEqual(
+    report.signals.map((signal) => [signal.signal, signal.value, signal.weight, signal.confidence]),
+    [["csstats_map_rank_volatility", "de_mirage: 5 to 12", 10, "medium"]],
   );
 });

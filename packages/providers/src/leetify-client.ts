@@ -234,7 +234,8 @@ export function buildLeetifyProfileStats(
     hltvRating: null,
     matches: recentGames.length || profile.recentGameRatings?.gamesPlayed || null,
     winRate: recentGames.length ? Math.round((wins / recentGames.length) * 100) : null,
-    hsPercentage: typeof headAccuracy === "number" ? Math.round(headAccuracy * 100) : null,
+    hsPercentage:
+      typeof headAccuracy === "number" && headAccuracy > 0 ? Math.round(headAccuracy * 100) : null,
     adr: null,
     clutchPercentage: leetifyPercent(profile.recentGameRatings?.clutch),
     recentResults: recentGames.slice(0, 5).flatMap((game) => resultCode(game.matchResult)),
@@ -257,9 +258,17 @@ export function buildLeetifyProfileStats(
     opening: leetifyScore(profile.recentGameRatings?.opening),
     tLeetify: leetifyScore(profile.recentGameRatings?.tLeetify),
     ctLeetify: leetifyScore(profile.recentGameRatings?.ctLeetify),
-    timeToDamage: leetifyMilliseconds(profile.recentGameRatings?.timeToDamage ?? reactionTime),
-    crosshairPlacement: rounded(profile.recentGameRatings?.crosshairPlacement ?? preaim),
+    timeToDamage: leetifyMilliseconds(
+      firstPositive(profile.recentGameRatings?.timeToDamage, reactionTime),
+    ),
+    crosshairPlacement: rounded(
+      firstPositive(profile.recentGameRatings?.crosshairPlacement, preaim),
+    ),
   };
+}
+
+function firstPositive(...values: Array<number | null | undefined>) {
+  return values.find((value): value is number => typeof value === "number" && value > 0) ?? null;
 }
 
 function leetifyScore(value: number | null | undefined) {
