@@ -87,6 +87,20 @@
 				memberships: string[];
 				hasPremium: boolean;
 				hasEsea: boolean;
+				bans: Array<{
+					reason: string | null;
+					type: string | null;
+					startsAt: string | null;
+					endsAt: string | null;
+					game: string | null;
+				}>;
+				latestBan: {
+					reason: string | null;
+					type: string | null;
+					startsAt: string | null;
+					endsAt: string | null;
+					game: string | null;
+				} | null;
 			} | null;
 		};
 	};
@@ -705,6 +719,14 @@
 		return rows;
 	}
 
+	function faceitBanLabel(profile: FaceitDetails | null | undefined) {
+		const ban = profile?.latestBan ?? profile?.bans?.[0];
+		if (!ban) {
+			return null;
+		}
+		return ban.reason ?? ban.type ?? 'unknown';
+	}
+
 	function freshnessStatus(value: string) {
 		if (value === 'error' || value === 'missing_config') return 'bad';
 		if (value === 'not fetched') return 'warn';
@@ -1056,6 +1078,9 @@
 																<span class:--esea={badge.toLowerCase() === 'esea'}>{badge}</span>
 															{/each}
 														</div>
+													{/if}
+													{#if source.label === 'FACEIT' && !source.missing && faceitBanLabel(faceit)}
+														<p class="cs-faceit-ban">Banned: {faceitBanLabel(faceit)}</p>
 													{/if}
 												</div>
 											{/each}

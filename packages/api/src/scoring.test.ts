@@ -143,6 +143,59 @@ test("stale FACEIT activity is low-weight suspicion", () => {
   );
 });
 
+test("recent FACEIT cheating ban is high-confidence evidence", () => {
+  const recentBanDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const report = scoreReport(
+    "76561198000000003",
+    [
+      {
+        provider: "faceit",
+        fetchStatus: "success",
+        rawPayload: {
+          found: true,
+          faceitUrl: "https://www.faceit.com/en/players/banned",
+          latestBan: {
+            reason: "cheating",
+            startsAt: recentBanDate,
+          },
+        },
+      },
+    ],
+    0,
+  );
+
+  assert.deepEqual(
+    report.signals.map((signal) => [signal.signal, signal.weight, signal.confidence]),
+    [["faceit_recent_cheating_ban", 25, "high"]],
+  );
+});
+
+test("older FACEIT ban history is moderate evidence", () => {
+  const report = scoreReport(
+    "76561198000000004",
+    [
+      {
+        provider: "faceit",
+        fetchStatus: "success",
+        rawPayload: {
+          found: true,
+          faceitUrl: "https://www.faceit.com/en/players/old-banned",
+          latestBan: {
+            reason: "cheating",
+            startsAt: "2019-04-01T00:00:00.000Z",
+          },
+        },
+      },
+    ],
+    0,
+  );
+
+  assert.deepEqual(
+    report.signals.map((signal) => [signal.signal, signal.weight, signal.confidence]),
+    [["faceit_ban_history", 15, "medium"]],
+  );
+});
+
 test("banned Steam friends are low-confidence evidence", () => {
   const report = scoreReport(
     "76561198000000003",

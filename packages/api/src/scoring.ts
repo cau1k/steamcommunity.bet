@@ -175,6 +175,24 @@ function buildSignals(
       sourceUrl: faceit?.faceitUrl ?? null,
     });
   }
+  const faceitBan = faceit?.latestBan ?? faceit?.bans?.[0] ?? null;
+  if (faceitBan) {
+    const reason = faceitBan.reason ?? faceitBan.type ?? "unknown";
+    const startsAt = faceitBan.startsAt ? new Date(faceitBan.startsAt) : null;
+    const recentCheatingBan =
+      /cheat/i.test(reason) &&
+      startsAt instanceof Date &&
+      !Number.isNaN(startsAt.getTime()) &&
+      Date.now() - startsAt.getTime() <= 365 * 24 * 60 * 60 * 1000;
+    signals.push({
+      provider: "faceit",
+      signal: recentCheatingBan ? "faceit_recent_cheating_ban" : "faceit_ban_history",
+      value: `FACEIT banned: ${reason}${faceitBan.startsAt ? ` on ${faceitBan.startsAt}` : ""}`,
+      weight: recentCheatingBan ? 25 : 15,
+      confidence: recentCheatingBan ? "high" : "medium",
+      sourceUrl: faceit?.faceitUrl ?? null,
+    });
+  }
   if (csstats?.premierRating && csstats.premierRating >= 24_000 && lacksFaceit) {
     signals.push({
       provider: "csstats",

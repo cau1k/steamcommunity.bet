@@ -736,6 +736,14 @@ p {
   background: color-mix(in srgb, #12b76a 28%, var(--cs-bg-2));
 }
 
+.cs-faceit-ban {
+  color: var(--cs-danger);
+  font-size: 16px;
+  line-height: 1.25;
+  margin: 0;
+  text-shadow: 1px 1px var(--cs-black);
+}
+
 .cs-source-missing {
   color: var(--cs-danger);
   font-size: 16px;

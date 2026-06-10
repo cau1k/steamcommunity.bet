@@ -78,7 +78,7 @@ export const reportRouter = {
       const report = await generateReport(
         resolved.steamId64,
         resolved.sourcePath,
-        false,
+        true,
         context.session?.user.id,
       );
       return { resolved, report, refreshQueued: false };
@@ -228,7 +228,11 @@ async function generateReport(
   }
 
   const db = createDb();
-  const caches = await db.select().from(providerCache).where(eq(providerCache.steamId, steamId64));
+  const storedCaches = await db
+    .select()
+    .from(providerCache)
+    .where(eq(providerCache.steamId, steamId64));
+  const caches = mergeProviderCaches(storedCaches, providerResults);
   const reports = await listPlayerReports(steamId64, viewerUserId);
   const scored = scoreReport(steamId64, caches, reports.accusationCount);
   const providerDetails = buildProviderDetails(caches);
@@ -328,6 +332,25 @@ async function generateReport(
     reports,
     strongestEvidenceDetails,
   );
+}
+
+function mergeProviderCaches(
+  storedCaches: Array<typeof providerCache.$inferSelect>,
+  providerResults: Array<PromiseSettledResult<typeof providerCache.$inferInsert>>,
+) {
+  const byProvider = new Map<
+    string,
+    typeof providerCache.$inferSelect | typeof providerCache.$inferInsert
+  >();
+  for (const cache of storedCaches) {
+    byProvider.set(cache.provider, cache);
+  }
+  for (const result of providerResults) {
+    if (result.status === "fulfilled") {
+      byProvider.set(result.value.provider, result.value);
+    }
+  }
+  return [...byProvider.values()] as Array<typeof providerCache.$inferSelect>;
 }
 
 async function refreshProvider(steamId64: string, provider: Provider, force: boolean) {
@@ -885,6 +908,8 @@ function faceitDetails(profile: FaceitProfile) {
     memberships: profile.memberships,
     hasPremium: profile.hasPremium,
     hasEsea: profile.hasEsea,
+    bans: profile.bans,
+    latestBan: profile.latestBan,
   };
 }
 

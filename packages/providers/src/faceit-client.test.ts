@@ -43,6 +43,19 @@ test("looks up FACEIT profile by Steam id", async () => {
           items: [{ finished_at: 1_736_942_400 }],
         });
       }
+      if (url.pathname === "/data/v4/players/faceit-player-id/bans") {
+        return Response.json({
+          items: [
+            {
+              reason: "cheating",
+              type: "game",
+              starts_at: "2025-01-20T00:00:00Z",
+              ends_at: null,
+              game: "cs2",
+            },
+          ],
+        });
+      }
       assert.fail("unexpected FACEIT request");
     },
   });
@@ -59,6 +72,8 @@ test("looks up FACEIT profile by Steam id", async () => {
   assert.equal(profile.hasPremium, true);
   assert.equal(profile.hasEsea, true);
   assert.deepEqual(profile.memberships, ["premium", "esea"]);
+  assert.equal(profile.latestBan?.reason, "cheating");
+  assert.equal(profile.latestBan?.startsAt, "2025-01-20T00:00:00Z");
 });
 
 test("treats FACEIT 404 as checked missing account", async () => {
